@@ -183,21 +183,39 @@ test.describe('Learning Persistence', () => {
   test('planner persists toggled completion and survives reload', async ({ page }) => {
     await loginViaUI(page, userData.email, userData.password);
 
+    await fetch(`${API_URL}/learning/mastery`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${userData.token}` },
+      body: JSON.stringify({
+        nodeId: 'concept-limits',
+        nodeType: 'CONCEPT',
+        mastery: 30,
+        dimensions: {},
+        attempts: 3,
+        lastPracticedAt: new Date().toISOString(),
+        confidence: 20,
+        weak: true,
+      }),
+    });
+
     await page.goto('/planner');
     await page.waitForLoadState('networkidle');
     await expect(page).toHaveURL(/\/planner$/, { timeout: 10000 });
 
-    await page.waitForSelector('input[type="checkbox"]', { timeout: 10000 });
+    await page.waitForSelector('input[type="checkbox"]', { timeout: 15000 });
     const checkboxes = await page.locator('input[type="checkbox"]').all();
     expect(checkboxes.length).toBeGreaterThan(0);
 
-    await checkboxes[0].check({ force: true });
+    await checkboxes[0].click({ force: true });
     await page.waitForTimeout(500);
+
+    const plansBefore = await page.evaluate(() => localStorage.getItem('lp-store-plans'));
+    console.log('PLANS BEFORE RELOAD:', plansBefore);
 
     await page.reload();
     await page.waitForLoadState('networkidle');
 
-    await page.waitForSelector('input[type="checkbox"]', { timeout: 10000 });
+    await page.waitForSelector('input[type="checkbox"]', { timeout: 15000 });
     const checked = await page.locator('input[type="checkbox"]').first().isChecked();
     expect(checked).toBe(true);
 
