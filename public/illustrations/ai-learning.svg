@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <circle cx="100" cy="100" r="80" fill="currentColor" opacity="0.05"/>
+  <rect x="60" y="55" width="80" height="90" rx="12" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <circle cx="100" cy="90" r="20" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <path d="M90 90 Q100 80 110 90 Q100 100 90 90" stroke="currentColor" stroke-width="2" stroke-linecap="round" fill="none" opacity="0.4"/>
+  <circle cx="100" cy="90" r="5" fill="currentColor" opacity="0.2"/>
+  <path d="M80 120 L120 120" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M85 130 L115 130" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <circle cx="75" cy="70" r="3" fill="currentColor" opacity="0.2"/>
+  <circle cx="125" cy="70" r="3" fill="currentColor" opacity="0.2"/>
+  <circle cx="100" cy="60" r="3" fill="currentColor" opacity="0.2"/>
+  <path d="M100 50 L100 55" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <path d="M100 145 L100 150" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <path d="M50 100 L55 100" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+  <path d="M145 100 L150 100" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+</svg>

@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 360" preserveAspectRatio="xMidYMid slice">
+  <defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+    <stop offset="0" stop-color="#F59E0B"/><stop offset="1" stop-color="#EA580C"/>
+  </linearGradient></defs>
+  <rect width="640" height="360" fill="url(#g)"/>
+  <g><line x1="71" y1="0" x2="71" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="142" y1="0" x2="142" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="213" y1="0" x2="213" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="284" y1="0" x2="284" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="355" y1="0" x2="355" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="426" y1="0" x2="426" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="497" y1="0" x2="497" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="568" y1="0" x2="568" y2="360" stroke="rgba(255,255,255,.06)"/><line x1="0" y1="72" x2="640" y2="72" stroke="rgba(255,255,255,.06)"/><line x1="0" y1="144" x2="640" y2="144" stroke="rgba(255,255,255,.06)"/><line x1="0" y1="216" x2="640" y2="216" stroke="rgba(255,255,255,.06)"/><line x1="0" y1="288" x2="640" y2="288" stroke="rgba(255,255,255,.06)"/></g>
+  <circle cx="540" cy="60" r="110" fill="rgba(255,255,255,.07)"/>
+  <circle cx="80" cy="320" r="140" fill="rgba(255,255,255,.06)"/>
+  <g transform="translate(0,-10)"><g stroke="rgba(255,255,255,.5)" stroke-width="12" fill="none" stroke-linejoin="round"><path d="M250 300 320 140l70 160z"/><path d="M320 140v160"/></g><line x1="220" y1="300" x2="420" y2="300" stroke="rgba(255,255,255,.5)" stroke-width="12" stroke-linecap="round"/></g>
+  <text x="32" y="326" font-family="system-ui,sans-serif" font-size="26" font-weight="600" fill="rgba(255,255,255,.85)">History</text>
+</svg>

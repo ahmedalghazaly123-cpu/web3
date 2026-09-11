@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <circle cx="100" cy="100" r="80" fill="currentColor" opacity="0.05"/>
+  <rect x="55" y="50" width="90" height="100" rx="8" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <path d="M55 75 L145 75" stroke="currentColor" stroke-width="3" stroke-linecap="round" opacity="0.3"/>
+  <rect x="70" y="55" width="10" height="10" rx="2" fill="currentColor" opacity="0.2"/>
+  <rect x="120" y="55" width="10" height="10" rx="2" fill="currentColor" opacity="0.2"/>
+  <path d="M70 95 L130 95" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M70 105 L120 105" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M70 115 L110 115" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M70 125 L125 125" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M70 135 L100 135" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <circle cx="100" cy="40" r="3" fill="currentColor" opacity="0.3"/>
+  <path d="M100 45 L100 50" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.3"/>
+</svg>

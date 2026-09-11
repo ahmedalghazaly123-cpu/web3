@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none">
+  <circle cx="100" cy="100" r="80" fill="currentColor" opacity="0.05"/>
+  <path d="M60 70 L140 70 Q145 70 145 75 L145 130 Q145 135 140 135 L60 135 Q55 135 55 130 L55 75 Q55 70 60 70 Z" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <path d="M55 75 L100 110 L145 75" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" opacity="0.4"/>
+  <circle cx="100" cy="55" r="8" fill="currentColor" opacity="0.1"/>
+  <circle cx="100" cy="55" r="5" fill="currentColor" opacity="0.2"/>
+  <circle cx="100" cy="55" r="2" fill="currentColor" opacity="0.4"/>
+  <path d="M70 95 L130 95" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M70 105 L120 105" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+  <path d="M70 115 L110 115" stroke="currentColor" stroke-width="2" stroke-linecap="round" opacity="0.2"/>
+</svg>

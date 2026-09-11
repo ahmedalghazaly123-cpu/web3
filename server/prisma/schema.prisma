@@ -1,0 +1,1138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  role          Role      @default(STUDENT)
+  locale        String    @default("en")
+  timezone      String    @default("UTC")
+  organizationId String?
+  studentProfileId String?
+  teacherProfileId String?
+  parentProfileId  String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  enrollments        Enrollment[]
+  questionAttempts   QuestionAttempt[]
+  learningEvents     LearningEvent[]
+  masteryRecords     MasteryRecord[]
+  mistakes           MistakeEntry[]
+  reviewCards        ReviewCard[]
+  planItems          PlanItem[]
+  studySessions      StudySession[]
+  achievements       Achievement[]
+  studentLevel       StudentLevel?
+  aiConversations    AiConversation[]
+  aiMessages         AiMessage[]
+  aiUsage            AiUsageRecord[]
+  attentionSnapshots AttentionSnapshot[]
+  liveRooms          LiveRoom[]        @relation("LiveRoomHost")
+  roomMemberships    RoomMembership[]
+  certificates       Certificate[]
+  bookmarks          Bookmark[]
+  learningGoals      LearningGoal[]
+  recoveryPlans      RecoveryPlan[]
+  examResults        ExamResult[]
+  learningDna        LearningDNA?
+  parentLinks        ParentLink[]      @relation("ParentLinkParent")
+  parentLinksChild   ParentLink[]      @relation("ParentLinkStudent")
+  parentSnapshots    ParentProgressSnapshot?
+  auditLogs          AuditLog[]
+  notifications      Notification[]
+
+  @@map("users")
+}
+
+model StudentProfile {
+  id            String   @id @default(uuid())
+  userId        String   @unique
+  grade         String?
+  interests     String[]
+  learningProfileId String?
+  createdAt     DateTime @default(now())
+
+  @@map("student_profiles")
+}
+
+model TeacherProfile {
+  id        String   @id @default(uuid())
+  userId    String   @unique
+  createdAt DateTime @default(now())
+
+  @@map("teacher_profiles")
+}
+
+model ParentLink {
+  id            String        @id @default(uuid())
+  parentUserId  String
+  studentUserId String
+  status        LinkStatus    @default(PENDING)
+  createdAt     DateTime      @default(now())
+
+  parent User @relation("ParentLinkParent", fields: [parentUserId], references: [id])
+  student User @relation("ParentLinkStudent", fields: [studentUserId], references: [id])
+
+  @@unique([parentUserId, studentUserId])
+  @@map("parent_links")
+}
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  nameAr    String?
+  slug      String   @unique
+  tiers     String[]
+  createdAt DateTime @default(now())
+
+  @@map("organizations")
+}
+
+model Course {
+  id                String    @id @default(uuid())
+  title             String
+  titleAr           String?
+  description       String
+  descriptionAr     String?
+  instructorId      String
+  instructorName    String
+  instructorNameAr  String?
+  instructorAvatar  String
+  category          String
+  categoryAr        String?
+  cover             String
+  color             String
+  durationMinutes   Int
+  totalLessons      Int
+  published         Boolean   @default(false)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  modules      Module[]
+  lessons      Lesson[]
+  enrollments  Enrollment[]
+  assessments  Assessment[]
+
+  @@map("courses")
+}
+
+model Module {
+  id        String   @id @default(uuid())
+  courseId  String
+  title     String
+  titleAr   String?
+  order     Int
+  createdAt DateTime @default(now())
+
+  course   Course     @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lessons  Lesson[]
+
+  @@map("modules")
+}
+
+model Lesson {
+  id              String   @id @default(uuid())
+  moduleId        String
+  courseId        String
+  title           String
+  titleAr         String?
+  description     String?
+  type            LessonType @default(VIDEO)
+  durationMinutes Int
+  order           Int
+  content         String?
+  locked          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  module   Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+  course   Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions Question[]
+
+  @@map("lessons")
+}
+
+model KnowledgeNode {
+  id              String   @id @default(uuid())
+  type            GraphNodeType
+  label           String
+  labelAr         String?
+  courseId        String?
+  moduleId        String?
+  lessonId        String?
+  topic           String?
+  skillId         String?
+  difficulty      Int?
+  masteryBaseline Int?     @default(50)
+  createdAt       DateTime @default(now())
+
+  edgesOut GraphEdge[] @relation("NodeEdgesOut")
+  edgesIn  GraphEdge[] @relation("NodeEdgesIn")
+
+  @@map("knowledge_nodes")
+}
+
+model GraphEdge {
+  id        String   @id @default(uuid())
+  sourceId  String
+  targetId  String
+  kind      EdgeKind
+  weight    Float?   @default(1.0)
+  createdAt DateTime @default(now())
+
+  source KnowledgeNode @relation("NodeEdgesOut", fields: [sourceId], references: [id], onDelete: Cascade)
+  target KnowledgeNode @relation("NodeEdgesIn", fields: [targetId], references: [id], onDelete: Cascade)
+
+  @@unique([sourceId, targetId, kind])
+  @@map("knowledge_edges")
+}
+
+model MasteryRecord {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  nodeId          String
+  nodeType        GraphNodeType
+  mastery         Int      @default(0)
+  dimensions      Json?
+  attempts        Int      @default(0)
+  lastPracticedAt DateTime
+  nextReviewAt    DateTime?
+  confidence      Int?     @default(0)
+  trend           Trend?
+  weak            Boolean  @default(false)
+  mastered        Boolean  @default(false)
+  updatedAt       DateTime @default(now())
+  lastEvidenceNote String?
+
+  @@unique([studentId, nodeId])
+  @@map("mastery_records")
+}
+
+model MasteryEvidence {
+  id         String   @id @default(uuid())
+  studentId  String
+  nodeId     String
+  nodeType   GraphNodeType
+  dimension  MasteryDimension
+  value      Int
+  source     EvidenceSource
+  happenedAt DateTime
+  metadata   Json?
+  createdAt  DateTime @default(now())
+
+  @@map("mastery_evidence")
+}
+
+model MistakeEntry {
+  id               String   @id @default(uuid())
+  studentId        String
+  student          User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  questionId       String?
+  lessonId         String?
+  courseId         String?
+  topic            String
+  topicAr          String?
+  category         MistakeCategory
+  question         String
+  studentAnswer    String
+  correctAnswer    String
+  explanation      String
+  explanationAr    String?
+  difficulty       Int
+  firstSeenAt      DateTime
+  lastSeenAt       DateTime
+  repetitionCount  Int      @default(1)
+  relatedConceptIds String[]
+  relatedMistakeIds String[]
+  resolved         Boolean  @default(false)
+  severity         Severity?
+  signals          Json?
+  explanationWhy   String?
+  recoveredAt      DateTime?
+  intervention     Json?
+  createdAt        DateTime @default(now())
+
+  @@map("mistakes")
+}
+
+model Question {
+  id               String   @id @default(uuid())
+  courseId         String?
+  lessonId         String?
+  topic            String
+  topicAr          String?
+  skillId          String?
+  conceptId        String?
+  type             QuestionType
+  difficulty       Int
+  body             String
+  bodyAr           String?
+  options          String[]
+  correctOptionIndex Int?
+  correctAnswer    String
+  explanation      String
+  explanationAr    String?
+  sourceLessonId   String?
+  sourceMaterial   String?
+  tags             String[]
+  cognitiveLevel   CognitiveLevel?
+  createdAt        DateTime @default(now())
+
+  lesson       Lesson?             @relation(fields: [lessonId], references: [id], onDelete: SetNull)
+  attempts     QuestionAttempt[]
+  assessmentQuestions AssessmentQuestion[]
+
+  @@map("questions")
+}
+
+model Assessment {
+  id                  String    @id @default(uuid())
+  title               String
+  titleAr             String?
+  type                AssessmentType
+  courseId            String?
+  lessonId            String?
+  questionIds         String[]
+  timeLimitSeconds    Int?
+  passingScore        Int
+  randomized          Boolean   @default(false)
+  shuffleQuestions    Boolean   @default(false)
+  shuffleOptions      Boolean   @default(false)
+  adaptive            Boolean   @default(false)
+  template            ExamTemplate?
+  topicCoverage       Json?
+  difficultyDistribution Json?
+  createdAt           DateTime  @default(now())
+
+  course         Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  assessmentQuestions AssessmentQuestion[]
+  examResults    ExamResult[]
+
+  @@map("assessments")
+}
+
+model AssessmentQuestion {
+  id           String   @id @default(uuid())
+  assessmentId String
+  questionId   String
+  order        Int
+
+  assessment   Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([assessmentId, questionId])
+  @@map("assessment_questions")
+}
+
+model QuestionAttempt {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  questionId      String
+  question        Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  sessionId       String?
+  selectedAnswer  String
+  correct         Boolean
+  timeSpentSeconds Int
+  answeredAt      DateTime
+  mode            AttemptMode?
+  mistakeId       String?
+
+  @@map("question_attempts")
+}
+
+model LearningEvent {
+  id          String   @id @default(uuid())
+  kind        LearningEventKind
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  source      LearningEventSource
+  happenedAt  DateTime
+  nodeId      String?
+  nodeType    GraphNodeType?
+  courseId    String?
+  lessonId    String?
+  questionId  String?
+  sessionId   String?
+  assessmentId String?
+  payload     Json?
+  clientKey   String?
+  createdAt   DateTime @default(now())
+
+  @@index([studentId, kind])
+  @@index([studentId, happenedAt])
+  @@map("learning_events")
+}
+
+model StudySession {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  planItemId      String?
+  startedAt       DateTime
+  endedAt         DateTime?
+  intendedMinutes Int
+  actualMinutes   Int?
+  topic           String
+  courseId        String?
+  focusGoal       String?
+  completed       Boolean  @default(false)
+  interruptCount  Int?
+  notes           String?
+  createdAt       DateTime @default(now())
+
+  @@map("study_sessions")
+}
+
+model PlanItem {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  kind            PlanItemKind
+  title           String
+  titleAr         String?
+  courseId        String?
+  lessonId        String?
+  topic           String?
+  estimatedMinutes Int
+  scheduledFor    DateTime
+  priority        Priority
+  status          PlanStatus @default(PENDING)
+  reason          String?
+  generatedBy     String?
+  createdAt       DateTime @default(now())
+
+  @@index([studentId, scheduledFor])
+  @@map("plan_items")
+}
+
+model ReviewCard {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  nodeId          String?
+  questionId      String?
+  mistakeId       String?
+  type            ReviewCardType
+  prompt          String
+  promptAr        String?
+  answer          String
+  answerAr        String?
+  difficulty      Int      @default(2)
+  easeFactor      Float    @default(2.5)
+  intervalDays    Int      @default(1)
+  repetitions     Int      @default(0)
+  nextReviewAt    DateTime
+  lastReviewedAt  DateTime?
+  quality         Int?
+  sourceLessonId  String?
+  createdAt       DateTime @default(now())
+
+  @@index([studentId, nextReviewAt])
+  @@map("review_cards")
+}
+
+model Achievement {
+  id        String   @id @default(uuid())
+  studentId String
+  student   User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  badgeId   String
+  earnedAt  DateTime
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  @@map("achievements")
+}
+
+model StudentLevel {
+  studentId     String   @id
+  student       User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  xp            Int      @default(0)
+  level         Int      @default(1)
+  xpToNext      Int      @default(100)
+  streak        Int      @default(0)
+  longestStreak Int      @default(0)
+  lastActiveAt  DateTime @default(now())
+
+  @@map("student_levels")
+}
+
+model AiConversation {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId    String?
+  lessonId    String?
+  title       String
+  titleAr     String?
+  mode        AiMode
+  startedAt   DateTime
+  updatedAt   DateTime
+  tags        String[]
+  createdAt   DateTime @default(now())
+
+  messages AiMessage[]
+
+  @@map("ai_conversations")
+}
+
+model AiMessage {
+  id              String   @id @default(uuid())
+  conversationId  String
+  conversation    AiConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  studentId       String?
+  student         User?     @relation(fields: [studentId], references: [id], onDelete:SetNull)
+  role            MessageRole
+  content         String
+  mode            AiMode?
+  citations       String[]
+  sourceLessonId  String?
+  sourceMaterial  String?
+  model           String?
+  latencyMs       Int?
+  costUsd         Float?
+  safetyPassed    Boolean?
+  createdAt       DateTime @default(now())
+
+  @@map("ai_messages")
+}
+
+model AiUsageRecord {
+  id              String   @id @default(uuid())
+  studentId       String?
+  student         User?     @relation(fields: [studentId], references: [id], onDelete:SetNull)
+  courseId        String?
+  feature         String
+  provider        AiProvider
+  model           String?
+  promptTokens    Int?
+  completionTokens Int?
+  costUsd         Float?
+  latencyMs       Int?
+  happenedAt      DateTime
+  status          UsageStatus
+  createdAt       DateTime @default(now())
+
+  @@index([studentId, happenedAt])
+  @@map("ai_usage")
+}
+
+model LiveRoom {
+  id          String        @id @default(uuid())
+  kind        LiveRoomKind
+  hostId      String
+  host        User          @relation("LiveRoomHost", fields: [hostId], references: [id], onDelete: Cascade)
+  title       String
+  privacy     RoomPrivacy
+  status      RoomStatus    @default(WAITING)
+  courseId    String?
+  language    Language?
+  createdAt   DateTime      @default(now())
+  startedAt   DateTime?
+  finishedAt  DateTime?
+  settings    Json?
+
+  memberships   RoomMembership[]
+
+  @@map("live_rooms")
+}
+
+model RoomMembership {
+  id        String   @id @default(uuid())
+  roomId    String
+  room      LiveRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      RoomRole @default(PARTICIPANT)
+  joinedAt  DateTime
+  finishedAt DateTime?
+  score     Int?
+  rank      Int?
+  createdAt DateTime @default(now())
+
+  @@unique([roomId, userId])
+  @@map("room_memberships")
+}
+
+model Certificate {
+  id               String           @id @default(uuid())
+  studentId        String
+  student          User             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId         String?
+  title            String
+  titleAr          String?
+  issuedAt         DateTime
+  score            Int?
+  trigger          CertificateTrigger
+  issuerId         String
+  issuerName       String
+  verificationCode String           @unique
+  hash             String?
+  url              String?
+  createdAt        DateTime         @default(now())
+
+  @@map("certificates")
+}
+
+model Bookmark {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  targetType  BookmarkTarget
+  targetId    String?
+  url         String?
+  excerpt     String?
+  note        String?
+  noteAr      String?
+  tags        String[]
+  reminderAt  DateTime?
+  createdAt   DateTime @default(now())
+
+  @@map("bookmarks")
+}
+
+model LearningGoal {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  title       String
+  titleAr     String?
+  targetSkillIds String[]
+  targetLessonIds String[]
+  deadline    DateTime?
+  status      GoalStatus @default(ACTIVE)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@map("learning_goals")
+}
+
+model RecoveryPlan {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  trigger     RecoveryTrigger
+  generatedAt DateTime
+  expiresAt   DateTime?
+  items       Json
+  summary     String
+  summaryAr   String?
+  createdAt   DateTime @default(now())
+
+  @@map("recovery_plans")
+}
+
+model ExamResult {
+  id               String   @id @default(uuid())
+  studentId        String
+  student          User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  assessmentId     String
+  assessment       Assessment @relation(fields: [assessmentId], references: [id], onDelete: Cascade)
+  startedAt        DateTime
+  finishedAt       DateTime?
+  submitted        Boolean  @default(false)
+  totalQuestions   Int
+  correct          Int
+  score            Int
+  timeUsedSeconds  Int?
+  questionResults  Json?
+  analysis         Json?
+  createdAt        DateTime @default(now())
+
+  @@map("exam_results")
+}
+
+model LearningDNA {
+  studentId           String   @id
+  student             User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  learningSpeed       LearningSpeed
+  preferredContentType String[]
+  strongestSubjects   String[]
+  weakSubjects        String[]
+  consistency         Consistency
+  difficultyTolerance DifficultyTolerance
+  mistakePatterns     MistakeCategory[]
+  studyTiming         StudyTiming[]
+  lastComputedAt      DateTime @default(now())
+
+  @@map("learning_dna")
+}
+
+model ParentProgressSnapshot {
+  studentId       String   @id
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  lastUpdatedAt   DateTime @default(now())
+  completionPercent Float?
+  studyHoursThisWeek Float?
+  studyHoursTotal    Float?
+  courseProgress   Json?
+  weakAreas        Json?
+  upcomingExams    Json?
+  streak           Int?
+  recentAchievements String[]
+  alerts           Json?
+
+  @@map("parent_progress_snapshots")
+}
+
+model AttentionSnapshot {
+  id          String   @id @default(uuid())
+  studentId   String
+  student     User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  sessionId   String?
+  signals     Json
+  sampledAt   DateTime
+  cameraConsent Boolean?
+  needsAttention Boolean?
+  note        String?
+  createdAt   DateTime @default(now())
+
+  @@map("attention_snapshots")
+}
+
+model AiProviderConfig {
+  id               String   @id @default(uuid())
+  label            String
+  enabled          Boolean  @default(true)
+  kind             AiProviderKind
+  baseUrl          String?
+  model            String?
+  defaultTimeoutMs Int?
+  maxTokens        Int?
+  weight           Float    @default(1.0)
+  route            ProviderRoute @default(PRIMARY)
+  createdAt        DateTime @default(now())
+
+  @@map("ai_providers")
+}
+
+model AiGatewayPolicy {
+  id                        String   @id @default(uuid())
+  defaultProviderId         String
+  fallbackChainIds          String[]
+  semanticCacheEnabled      Boolean  @default(true)
+  budgetUsdMonthly          Float?
+  budgetAlertThreshold      Int?     @default(80)
+  rateLimitRequestsPerMinute Int?    @default(60)
+  piiRedactionEnabled       Boolean  @default(true)
+  unsafeBlockEnabled        Boolean  @default(true)
+  academicIntegrityDefaultMode AiMode @default(ASSIST)
+  createdAt                 DateTime @default(now())
+  updatedAt                 DateTime @updatedAt
+
+  @@map("ai_gateway_policies")
+}
+
+model FeatureFlag {
+  key       String   @id
+  enabled   Boolean  @default(true)
+  roles     String[]
+  minEnv    String?
+  updatedAt DateTime @updatedAt
+
+  @@map("feature_flags")
+}
+
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  message   String
+  category  String
+  read      Boolean  @default(false)
+  data      Json?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+  @@map("notifications")
+}
+
+model AuditLog {
+  id          String   @id @default(uuid())
+  actorId     String?
+  actor       User?     @relation(fields: [actorId], references: [id], onDelete:SetNull)
+  action      String
+  targetType  String?
+  targetId    String?
+  ipAddress   String?
+  userAgent   String?
+  metadata    Json?
+  createdAt   DateTime @default(now())
+
+  @@index([actorId, createdAt])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+model Session {
+  id        String   @id @default(uuid())
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model Enrollment {
+  id              String   @id @default(uuid())
+  studentId       String
+  student         User     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  courseId        String
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  classroomId     String?
+  status          EnrollmentStatus @default(ACTIVE)
+  startedAt       DateTime?
+  completedAt     DateTime?
+  progressPercent Float?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("enrollments")
+}
+
+model Classroom {
+  id        String   @id @default(uuid())
+  teacherId String
+  title     String
+  titleAr   String?
+  courseId  String?
+  status    ClassroomStatus @default(ACTIVE)
+  createdAt DateTime @default(now())
+
+  @@map("classrooms")
+}
+
+// Enums
+enum Role {
+  STUDENT
+  TEACHER
+  ADMIN
+  OWNER
+  PARENT
+}
+
+enum LinkStatus {
+  PENDING
+  ACTIVE
+  REVOKED
+}
+
+enum LessonType {
+  VIDEO
+  TEXT
+  PDF
+  INTERACTIVE
+  LIVE
+}
+
+enum GraphNodeType {
+  COURSE
+  MODULE
+  LESSON
+  CONCEPT
+  SKILL
+  TOPIC
+  QUESTION
+  PREREQUISITE
+}
+
+enum EdgeKind {
+  PREREQUISITE
+  PART_OF
+  RELATED
+  ASSESSES
+  TEACHES
+  WEAKNESS_LINKED
+}
+
+enum MasteryDimension {
+  QUIZ
+  EXAM
+  RESPONSE_ACCURACY
+  RESPONSE_TIME
+  REPEATED_MISTAKES
+  REVISION_FREQUENCY
+  COMPLETION
+  LEARNING_CONSISTENCY
+  DIFFICULTY_ADJUSTED
+}
+
+enum EvidenceSource {
+  QUIZ
+  EXAM
+  PRACTICE
+  AI_TUTOR
+  REVISION
+  SESSION
+  MANUAL
+  STUDENT
+  ASSESSMENT
+}
+
+enum MistakeCategory {
+  CARELESS
+  CONCEPTUAL
+  CALCULATION
+  PREREQUISITE
+  MISUNDERSTANDING
+  REPEATED
+  RETRIEVAL_FAILURE
+  TIMING
+}
+
+enum Severity {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  MULTIPLE_SELECT
+  SHORT_ANSWER
+  CODE
+  MATH
+}
+
+enum CognitiveLevel {
+  REMEMBER
+  UNDERSTAND
+  APPLY
+  ANALYZE
+  EVALUATE
+}
+
+enum AssessmentType {
+  QUIZ
+  EXAM
+}
+
+enum ExamTemplate {
+  UNIT_TEST
+  MIDTERM
+  FINAL
+  MOCK_EXAM
+}
+
+enum AttemptMode {
+  QUIZ
+  EXAM
+  PRACTICE
+  ADAPTIVE
+  AI_TUTOR
+}
+
+enum LearningEventKind {
+  LESSON_VIEWED
+  LESSON_COMPLETED
+  QUESTION_ANSWERED
+  QUIZ_SUBMITTED
+  EXAM_SUBMITTED
+  REVIEW_COMPLETED
+  MISTAKE_RECORDED
+  CONCEPT_LINKED
+  SESSION_STARTED
+  SESSION_ENDED
+  GOAL_UPDATED
+}
+
+enum LearningEventSource {
+  STUDENT
+  ASSESSMENT
+  AI_TUTOR
+  PLANNER
+  SPACED_REPETITION
+  CLASSROOM
+  SYSTEM
+}
+
+enum PlanItemKind {
+  LESSON
+  PRACTICE
+  QUIZ
+  EXAM
+  REVISION
+  REMEDIATION
+  CHALLENGE
+  BREAK
+}
+
+enum Priority {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum PlanStatus {
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+  MISSED
+  SKIPPED
+}
+
+enum ReviewCardType {
+  FLASHCARD
+  QUESTION
+  CONCEPT
+  MISTAKE
+}
+
+enum AiMode {
+  EXPLAIN
+  HINT
+  SOCRATIC
+  STEP_BY_STEP
+  EXAM_PREP
+  REVISION
+  ERROR_EXPLANATION
+  FULL_SOLUTION
+  GUIDED_SOLUTION
+  ASSIST
+}
+
+enum MessageRole {
+  USER
+  AI
+}
+
+enum AiProvider {
+  GATEWAY_PRIMARY
+  GATEWAY_FALLBACK
+  LOCAL_DEMO
+}
+
+enum UsageStatus {
+  OK
+  FALLBACK
+  ERROR
+  CACHED
+}
+
+enum LiveRoomKind {
+  STUDY_ROOM
+  QUIZ_BATTLE
+  CODING_BATTLE
+}
+
+enum RoomPrivacy {
+  PUBLIC
+  PRIVATE
+  INVITE_ONLY
+}
+
+enum RoomStatus {
+  WAITING
+  COUNTDOWN
+  RUNNING
+  FINISHED
+}
+
+enum RoomRole {
+  HOST
+  PARTICIPANT
+  MODERATOR
+}
+
+enum CertificateTrigger {
+  COURSE_COMPLETION
+  PASSING_EXAM
+  ACHIEVEMENT
+  MANUAL
+}
+
+enum BookmarkTarget {
+  LESSON
+  PARAGRAPH
+  QUESTION
+  AI_EXPLANATION
+  RESOURCE
+}
+
+enum GoalStatus {
+  ACTIVE
+  COMPLETED
+  ABANDONED
+}
+
+enum RecoveryTrigger {
+  MISSED_SESSIONS
+  LOW_SCORES
+  DEADLINE
+  DROPPED_COURSE
+  MANUAL
+}
+
+enum Language {
+  EN
+  AR
+}
+
+enum AiProviderKind {
+  OPENAI
+  ANTHROPIC
+  GOOGLE
+  AZURE
+  CUSTOM
+  DEMO
+}
+
+enum ProviderRoute {
+  PRIMARY
+  FALLBACK
+  CACHE_ONLY
+}
+
+enum Trend {
+  IMPROVING
+  STABLE
+  DECLINING
+}
+
+enum LearningSpeed {
+  SLOWER
+  AVERAGE
+  FASTER
+}
+
+enum Consistency {
+  LOW
+  MEDIUM
+  HIGH
+}
+
+enum DifficultyTolerance {
+  PREFERS_CHALLENGE
+  BALANCED
+  PREFERS_EASIER
+}
+
+enum StudyTiming {
+  MORNING
+  AFTERNOON
+  EVENING
+  NIGHT
+}
+
+enum EnrollmentStatus {
+  ACTIVE
+  COMPLETED
+  DROPPED
+}
+
+enum ClassroomStatus {
+  ACTIVE
+  ARCHIVED
+}
