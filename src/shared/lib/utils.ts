@@ -65,8 +65,9 @@ export function isActivePath(pathname: string, path: string): boolean {
 }
 
 /**
- * Generate a random streak number (for demo).
+ * Placeholder streak helper — backend productivity streak is the source of truth.
+ * Returns 0 so no fake streak is ever displayed; UI should read the real value.
  */
 export function generateStreak(): number {
-  return Math.floor(Math.random() * 30) + 1;
+  return 0;
 }

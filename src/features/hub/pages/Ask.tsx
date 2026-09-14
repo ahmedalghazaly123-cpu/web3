@@ -1,26 +1,29 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../../shared/components/ui/Card';
 import { Button } from '../../../shared/components/ui/Button';
 import { Badge } from '../../../shared/components/ui/Badge';
 import { EmptyState } from '../../../shared/components/ui/EmptyState';
 import { aiStudio } from '../../../shared/services/ai-studio';
-import { getMockUser } from '../../../shared/lib/mockAuth';
+import { useAuth } from '../../../app/layout/AuthProvider';
+import { learningSync } from '../../../shared/services/learningSync';
 import { Search, BookOpen, Loader2 } from 'lucide-react';
-
-function sid(): string { return getMockUser()?.id ?? 'student-001'; }
 
 export default function AskPage() {
   const { t } = useTranslation('hub');
+  const { user } = useAuth();
+  const studentId = user?.id ?? 'student-local';
   const [q, setQ] = useState('');
   const [loading, setLoading] = useState(false);
   const [res, setRes] = useState<{ answer: string; courseTitle: string; concepts: string; sources: string[]; related: string[] } | null>(null);
+
+  useEffect(() => { if (user?.id) void learningSync.hydrate(user.id); }, [user?.id]);
 
   const ask = async () => {
     if (!q.trim()) return;
     setLoading(true);
     try {
-      const r = await aiStudio.askCourse(sid(), 'calculus-1', q, 'l3');
+      const r = await aiStudio.askCourse(studentId, 'calculus-1', q, 'l3');
       setRes(r);
     } finally { setLoading(false); }
   };

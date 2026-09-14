@@ -1,3 +1,4 @@
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../shared/components/ui/Button';
@@ -9,31 +10,45 @@ import { CourseCover } from '../../../shared/components/ui/CourseCover';
 import { IconBox } from '../../../shared/components/ui/IconBox';
 import { courses } from '../../../data';
 import {
-  BrainCircuit, TrendingUp, Star, Flame, Clock, Calendar, Play,
-  CheckCircle, Circle, Sparkles,
+  BrainCircuit, TrendingUp, Flame, Clock, Calendar, Play,
+  CheckCircle, Sparkles,
 } from 'lucide-react';
 import { formatDuration, getTimeBasedGreeting } from '../../../shared/lib/utils';
+import { useAuth } from '../../../app/layout/AuthProvider';
+import { learningSync } from '../../../shared/services/learningSync';
+import { store } from '../../../shared/services/store';
 import { AiLessonSummary, QuickQuizWidget, AchievementsCard } from '../components/DashboardExtras';
 
 export default function StudentDashboard() {
   const { t } = useTranslation('dashboard');
   const { t: tCourses } = useTranslation('courses');
-  const currentCourse = courses[0];
+  const { user } = useAuth();
+  const studentId = user?.id ?? 'student-local';
+  const [progress, setProgress] = useState<{ masteryPercent: number; eventCount: number } | null>(null);
+
+  useEffect(() => {
+    if (user?.id) {
+      void learningSync.hydrate(user.id);
+      learningSync.getProgress().then((p: any) => setProgress({ masteryPercent: p?.masteryPercent ?? 0, eventCount: p?.eventCount ?? 0 })).catch(() => setProgress(null));
+    }
+  }, [user?.id]);
 
   const greeting = getTimeBasedGreeting();
   const welcomeKey = `welcome${greeting.charAt(0).toUpperCase()}${greeting.slice(1)}`;
 
   const stats = [
-    { label: t('statToday'), value: '45 min', tone: 'brand' as const, icon: <Clock /> },
-    { label: t('statThisWeek'), value: '3.2h', tone: 'success' as const, icon: <TrendingUp /> },
-    { label: t('statStreak'), value: '7', tone: 'accent' as const, icon: <Flame /> },
+    { label: t('statToday'), value: `${progress?.eventCount ?? 0} events`, tone: 'brand' as const, icon: <Clock /> },
+    { label: t('statThisWeek'), value: `${progress?.masteryPercent ?? 0}% avg`, tone: 'success' as const, icon: <TrendingUp /> },
+    { label: t('statStreak'), value: `${store.level.get(studentId)?.streak ?? 0}`, tone: 'accent' as const, icon: <Flame /> },
   ];
 
-  const todaysTasks = [
-    { id: 1, title: 'Finish Calculus derivatives', completed: false, duration: 25, priority: 'high' as const },
-    { id: 2, title: 'Review weak topic: Chain Rule', completed: false, duration: 15, priority: 'medium' as const },
-    { id: 3, title: 'Practice linear algebra problems', completed: true, duration: 30, priority: 'low' as const },
-  ];
+  const todaysTasks = store.plans.listUpcoming(studentId, new Date().toISOString().slice(0, 10), new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10)).map((p) => ({
+    id: p.id,
+    title: p.title || `${p.kind} – ${p.topic || 'study'}`,
+    completed: p.status === 'completed',
+    duration: p.estimatedMinutes || 30,
+    priority: p.priority || 'medium' as const,
+  }));
 
   return (
     <div className="space-y-8 pb-8 page-enter">
@@ -74,27 +89,27 @@ export default function StudentDashboard() {
           <Badge variant="primary" size="sm">{t('inProgress')}</Badge>
         </div>
         <Card variant="elevated" padding="none" className="overflow-hidden card-lift">
-          <CourseCover src={currentCourse.image} alt={currentCourse.title} className="aspect-video">
-            <Badge className="absolute top-4 start-4" variant="surface">{currentCourse.category}</Badge>
+          <CourseCover src={courses[0]?.image ?? ''} alt={courses[0]?.title ?? ''} className="aspect-video">
+            <Badge className="absolute top-4 start-4" variant="surface">{courses[0]?.category ?? ''}</Badge>
             <div className="absolute bottom-4 end-4 flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-black/40 backdrop-blur-sm text-white text-caption font-medium">
               <Play className="w-3 h-3 fill-current ps-px" />
-              <span>27 / {currentCourse.totalLessons}</span>
+              <span>{courses[0]?.completedLessons ?? 0} / {courses[0]?.totalLessons ?? 0}</span>
             </div>
           </CourseCover>
           <div className="p-6">
-            <h3 className="h3 text-text-primary mb-1">{currentCourse.title}</h3>
-            <p className="body-sm text-text-secondary mb-4 line-clamp-2">{currentCourse.description}</p>
+            <h3 className="h3 text-text-primary mb-1">{courses[0]?.title ?? 'No course in progress'}</h3>
+            <p className="body-sm text-text-secondary mb-4 line-clamp-2">{courses[0]?.description ?? ''}</p>
             <div className="space-y-3 mb-4">
               <div className="flex justify-between text-sm">
-                <span className="text-text-secondary">{t('lessonsOf', { current: 27, total: currentCourse.totalLessons, title: 'Derivatives Rules' })}</span>
-                <span className="text-brand font-semibold">{Math.round(currentCourse.progress * 100)}%</span>
+                <span className="text-text-secondary">{t('lessonsOf', { current: courses[0]?.completedLessons ?? 0, total: courses[0]?.totalLessons ?? 0, title: 'Derivatives Rules' })}</span>
+                <span className="text-brand font-semibold">{Math.round((courses[0]?.progress ?? 0) * 100)}%</span>
               </div>
-              <ProgressBar value={currentCourse.progress * 100} variant="brand" size="md" />
+              <ProgressBar value={(courses[0]?.progress ?? 0) * 100} variant="brand" size="md" />
               <p className="text-caption text-text-tertiary">
-                {t('lessonsCompleted', { completed: currentCourse.completedLessons, total: currentCourse.totalLessons })}
+                {t('lessonsCompleted', { completed: courses[0]?.completedLessons ?? 0, total: courses[0]?.totalLessons ?? 0 })}
               </p>
             </div>
-            <Link to={`/courses/${currentCourse.id}`}>
+            <Link to={`/courses/${courses[0]?.id ?? ''}`}>
               <Button variant="primary" size="md" rightIcon={<Play className="w-4 h-4" />}>
                 {tCourses('continue')}
               </Button>
@@ -110,11 +125,11 @@ export default function StudentDashboard() {
         </div>
 
         {/* ━━━─ Progress ring ━━━─ */}
-        <div>
-          <Card variant="elevated" padding="md" className="flex flex-col items-center text-center h-full">
-            <ProgressRing value={65} size={100} strokeWidth={8} color="brand" />
-                        <h3 className="text-sm font-medium text-text-primary mt-3">{t('overallProgress')}</h3>
-            <p className="text-caption text-text-tertiary mt-1">{t('learningPathComplete', { percent: 65 })}</p>
+        <div className="lg:col-span-1">
+          <Card variant="elevated" padding="md" className="text-center">
+            <ProgressRing value={progress?.masteryPercent ?? 0} size={100} strokeWidth={8} color="brand" />
+            <h3 className="text-sm font-medium text-text-primary mt-3">{t('overallProgress')}</h3>
+            <p className="text-caption text-text-tertiary mt-1">{t('learningPathComplete', { percent: progress?.masteryPercent ?? 0 })}</p>
             <Link to="/progress" className="mt-4 text-sm text-brand hover:text-brand-hover">{t('progressSummary')} ↗</Link>
           </Card>
         </div>
@@ -137,21 +152,18 @@ export default function StudentDashboard() {
         <Card variant="elevated" padding="md" className="lg:col-span-1">
           <div className="flex items-center gap-3 mb-3">
             <TrendingUp className="w-5 h-5 text-error" />
-                        <h3 className="font-medium text-text-primary">{t('weakTopics')}</h3>
+            <h3 className="font-medium text-text-primary">{t('weakTopics')}</h3>
           </div>
           <ul className="space-y-2">
-            <li className="flex items-center justify-between">
-              <span className="body-sm text-text-secondary">Chain Rule</span>
-              <Badge variant="error" size="xs">64%</Badge>
-            </li>
-            <li className="flex items-center justify-between">
-              <span className="body-sm text-text-secondary">L'Hopital's Rule</span>
-              <Badge variant="warning" size="xs">42%</Badge>
-            </li>
-            <li className="flex items-center justify-between">
-              <span className="body-sm text-text-secondary">Implicit Diff.</span>
-              <Badge variant="error" size="xs">58%</Badge>
-            </li>
+            {store.mastery.listByStudent(studentId).filter((m) => (m.mastery ?? 0) < 60).slice(0, 3).map((m) => (
+              <li key={m.nodeId} className="flex items-center justify-between">
+                <span className="body-sm text-text-secondary">{m.nodeId.replace('concept-', '').replace('skill-', '')}</span>
+                <Badge variant={m.mastery < 40 ? 'error' : m.mastery < 60 ? 'warning' : 'default'} size="xs">{m.mastery ?? 0}%</Badge>
+              </li>
+            ))}
+            {store.mastery.listByStudent(studentId).filter((m) => (m.mastery ?? 0) < 60).length === 0 && (
+              <li className="text-sm text-text-tertiary">No weak topics yet</li>
+            )}
           </ul>
         </Card>
 
@@ -181,9 +193,17 @@ export default function StudentDashboard() {
         <h2 className="h3 text-text-primary mb-4">{t('recentActivity')}</h2>
         <Card variant="elevated" padding="md">
           <ul className="divide-y divide-surface-border">
-                        <ActivityItem icon={<CheckCircle className="w-4 h-4 text-success" />} text={t('activity.completedDerivatives.text')} time={t('activity.completedDerivatives.time')} />
-            <ActivityItem icon={<Circle className="w-4 h-4 text-brand" />} text={t('activity.startedChainRule.text')} time={t('activity.startedChainRule.time')} />
-            <ActivityItem icon={<Star className="w-4 h-4 text-warning" />} text={t('activity.earnedAchievement.text')} time={t('activity.earnedAchievement.time')} />
+            {store.events.listByStudent(studentId).slice(0, 5).map((e, i) => (
+              <ActivityItem
+                key={e.id ?? i}
+                icon={<CheckCircle className="w-4 h-4 text-success" />}
+                text={`${e.kind}`}
+                time={String((e as { happenedAt?: string }).happenedAt ?? new Date().toISOString())}
+              />
+            ))}
+            {store.events.listByStudent(studentId).length === 0 && (
+              <li className="text-sm text-text-tertiary py-3">No recent activity yet.</li>
+            )}
           </ul>
         </Card>
       </div>
@@ -191,7 +211,7 @@ export default function StudentDashboard() {
   );
 }
 
-function TodaysPlan({ tasks }: { tasks: { id: number; title: string; completed: boolean; duration: number; priority: 'high' | 'medium' | 'low' }[] }) {
+function TodaysPlan({ tasks }: { tasks: { id: string; title: string; completed: boolean; duration: number; priority: 'high' | 'medium' | 'low' }[] }) {
   const { t } = useTranslation('dashboard');
   return (
     <div>

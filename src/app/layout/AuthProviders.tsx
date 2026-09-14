@@ -19,7 +19,14 @@ export function DirectionUpdater() {
 
 export function RequireAuth() {
   const location = useLocation();
-  const { authenticated } = useAuth();
+  const { authenticated, ready } = useAuth();
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-secondary">
+        <span className="w-8 h-8 rounded-full border-2 border-surface-border border-t-brand animate-spin" />
+      </div>
+    );
+  }
   if (!authenticated) {
     return <Navigate to="/account-type" state={{ from: location.pathname }} replace />;
   }
@@ -27,7 +34,14 @@ export function RequireAuth() {
 }
 
 export function RequireRole({ allowed }: { allowed: UserRole[] }) {
-  const { authenticated, role } = useAuth();
+  const { authenticated, ready, role } = useAuth();
+  if (!ready) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-surface-secondary">
+        <span className="w-8 h-8 rounded-full border-2 border-surface-border border-t-brand animate-spin" />
+      </div>
+    );
+  }
   if (!authenticated) {
     return <Navigate to="/account-type" replace />;
   }

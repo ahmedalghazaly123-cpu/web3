@@ -35,13 +35,13 @@ describe('tutorContextEngine (Phase 12)', () => {
 });
 
 describe('courseRetrieval (Phase 13)', () => {
-  it('grounds answers with citations', () => {
-    const a = askCourse('What is the power rule for derivatives?');
+  it('grounds answers with citations', async () => {
+    const a = await askCourse('What is the power rule for derivatives?');
     expect(a.grounded).toBe(true);
     expect(a.citations.length).toBeGreaterThan(0);
   });
-  it('refuses when no evidence', () => {
-    const a = askCourse('Explain quantum chromodynamics funding policy');
+  it('refuses when no evidence', async () => {
+    const a = await askCourse('Explain quantum chromodynamics funding policy');
     expect(a.grounded).toBe(false);
     expect(a.answer).toMatch(/enough course evidence/i);
   });

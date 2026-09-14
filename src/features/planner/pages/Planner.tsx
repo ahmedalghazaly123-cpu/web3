@@ -6,7 +6,7 @@ import { Badge } from '../../../shared/components/ui/Badge';
 import { ProgressRing } from '../../../shared/components/ui/ProgressRing';
 import { ProgressBar } from '../../../shared/components/ui/ProgressBar';
 import { Clock, Flame, Plus, ChevronRight } from 'lucide-react';
-import { cn, formatDuration } from '../../../shared/lib/utils';
+import { formatDuration } from '../../../shared/lib/utils';
 import { useAuth } from '../../../app/layout/AuthProvider';
 import { learningSync } from '../../../shared/services/learningSync';
 import { store } from '../../../shared/services/store';
@@ -30,12 +30,10 @@ const CONCEPT_LABEL: Record<string, string> = {
   'concept-continuity': 'Continuity',
 };
 
-const daysOfWeek = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
-
 function itemToSession(item: PlanItem): PlanSession {
   return {
     id: item.id,
-    title: item.title || `${item.kind} – ${item.topic || item.nodeId || 'study'}`,
+    title: item.title || `${item.kind} – ${item.topic || 'study'}`,
     topic: item.topic || (item.courseId ? 'Course' : item.kind),
     duration: Math.max(15, item.estimatedMinutes || 30),
     priority: item.priority || 'medium',
@@ -71,6 +69,7 @@ export default function PlannerPage() {
         }
       }
       setItems(planned.items);
+      learningSync.syncPlans(studentId);
       setLoading(false);
     };
     load();
@@ -132,11 +131,12 @@ export default function PlannerPage() {
         progress={todayProgress}
         completed={completedToday}
         total={totalToday}
-        onToggle={(id: string, done: boolean) => {
+        onToggle={async (id: string, done: boolean) => {
           const item = items.find((i) => i.id === id);
           if (item) {
             const updated: PlanItem = { ...item, status: done ? 'completed' : 'pending' };
             store.plans.save(updated);
+            await learningSync.updatePlan(id, { status: done ? 'completed' : 'pending' });
             setItems((prev) => prev.map((i) => (i.id === id ? updated : i)));
           }
         }}
@@ -184,7 +184,7 @@ function TodayView({
   sessions, progress, completed, total, onToggle,
 }: {
   sessions: PlanSession[]; progress: number; completed: number; total: number;
-  onToggle: (id: string, done: boolean) => void;
+  onToggle: (id: string, done: boolean) => Promise<void> | void;
 }) {
   const { t } = useTranslation('planner');
   return (
@@ -211,7 +211,7 @@ function TodayView({
   );
 }
 
-function SessionItem({ session, onToggle }: { session: PlanSession; onToggle: (id: string, done: boolean) => void }) {
+function SessionItem({ session, onToggle }: { session: PlanSession; onToggle: (id: string, done: boolean) => Promise<void> | void }) {
   const { t } = useTranslation('planner');
   return (
     <Card variant="elevated" padding="md" className="flex items-center gap-4">

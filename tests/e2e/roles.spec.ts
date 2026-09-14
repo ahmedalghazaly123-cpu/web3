@@ -14,46 +14,64 @@ async function createTestUser(role: 'student' | 'teacher' | 'admin' | 'owner', p
   return { email, password, token: data.token, userId: data.user.id };
 }
 
+async function expandElevatedRoles(page: any) {
+  // Admin / Owner cards live inside a collapsed "More account types" section.
+  const toggle = page.getByRole('button', { name: /more account types/i });
+  if (await toggle.count()) {
+    await toggle.click();
+    await page.waitForTimeout(300);
+  }
+}
+
+async function clickRoleCard(page: any, role: string) {
+  // Role cards are <button role="listitem">, so match by tag + text, not role=button.
+  const roleBtn = page.locator('button').filter({ hasText: new RegExp(role, 'i') }).first();
+  await roleBtn.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  await roleBtn.click({ force: true });
+}
+
 test.describe('Role Enforcement', () => {
   test('student cannot access admin page', async ({ page }) => {
     const { email, password } = await createTestUser('student');
     await page.goto('/account-type');
     await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: /student/i }).click();
-    await page.waitForURL('**/login/student');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page).toHaveURL('**/dashboard');
+    await clickRoleCard(page, 'Student');
+    await page.waitForURL(/\/login\/student$/, { timeout: 10000 });
+    await page.getByLabel(/Email address/).fill(email);
+    await page.getByLabel(/Password/).fill(password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
 
     await page.goto('/admin');
-    await expect(page).toHaveURL('**/dashboard');
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 
   test('admin can access admin page', async ({ page }) => {
     const { email, password } = await createTestUser('admin');
     await page.goto('/account-type');
     await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: /admin/i }).click();
-    await page.waitForURL('**/login/admin');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page).toHaveURL('**/admin');
+    await expandElevatedRoles(page);
+    await clickRoleCard(page, 'Admin');
+    await page.waitForURL(/\/login\/admin$/, { timeout: 10000 });
+    await page.getByLabel(/Email address/).fill(email);
+    await page.getByLabel(/Password/).fill(password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(/\/admin$/);
   });
 
   test('student cannot access teacher page', async ({ page }) => {
     const { email, password } = await createTestUser('student');
     await page.goto('/account-type');
     await page.waitForLoadState('networkidle');
-    await page.getByRole('button', { name: /student/i }).click();
-    await page.waitForURL('**/login/student');
-    await page.getByLabel(/email/i).fill(email);
-    await page.getByLabel(/password/i).fill(password);
-    await page.getByRole('button', { name: /sign in/i }).click();
-    await expect(page).toHaveURL('**/dashboard');
+    await clickRoleCard(page, 'Student');
+    await page.waitForURL(/\/login\/student$/, { timeout: 10000 });
+    await page.getByLabel(/Email address/).fill(email);
+    await page.getByLabel(/Password/).fill(password);
+    await page.getByRole('button', { name: 'Sign in', exact: true }).click();
+    await expect(page).toHaveURL(/\/dashboard$/);
 
     await page.goto('/teacher');
-    await expect(page).toHaveURL('**/dashboard');
+    await expect(page).toHaveURL(/\/dashboard$/);
   });
 });

@@ -35,7 +35,9 @@ export const learningEngine = {
     const bank = this.questionBank().filter((q) => !topic || q.topic === topic);
     const pool = bank.filter((q) => Math.abs(q.difficulty - target) <= 1);
     const arr = pool.length ? pool : bank.length ? bank : FALLBACK;
-    return arr[Math.floor(Math.random() * arr.length)] ?? FALLBACK[0];
+    // Deterministic rotation (stable, test-friendly): pick by attempt count, not Math.random.
+    const attempts = rec?.attempts ?? 0;
+    return arr[attempts % arr.length] ?? FALLBACK[0];
   },
 
   answer(studentId: EntityId, nodeId: EntityId, nodeType: GraphNodeType, q: Question, choice: number, seconds: number): { correct: boolean; record: MasteryRecord; nextDifficulty: number } {

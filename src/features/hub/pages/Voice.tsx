@@ -1,16 +1,21 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../../shared/components/ui/Card';
 import { Button } from '../../../shared/components/ui/Button';
 import { Badge } from '../../../shared/components/ui/Badge';
 import { EmptyState } from '../../../shared/components/ui/EmptyState';
+import { useAuth } from '../../../app/layout/AuthProvider';
+import { learningSync } from '../../../shared/services/learningSync';
 import { aiStudio } from '../../../shared/services/ai-studio';
 import { featureFlags } from '../../../shared/services/feature-flags';
-import { getMockUser } from '../../../shared/lib/mockAuth';
 import { Mic, MicOff, Volume2, VolumeX, Loader2, AlertTriangle } from 'lucide-react';
 
 export default function VoicePage() {
   const { t, i18n } = useTranslation('hub');
+  const { user } = useAuth();
+  const studentId = user?.id ?? 'student-local';
+  useEffect(() => { if (user?.id) void learningSync.hydrate(user.id); }, [user?.id]);
+
   const voiceLang = (i18n.language === 'ar' ? 'ar' : 'en') as 'ar' | 'en';
   const [listening, setListening] = useState(false);
   const [transcript, setTranscript] = useState('');
@@ -41,7 +46,7 @@ export default function VoicePage() {
     if (!transcript.trim()) return;
     setLoading(true);
     try {
-      const r = await aiStudio.askCourse(getMockUser()?.id ?? 'student-001', 'calculus-1', transcript);
+      const r = await aiStudio.askCourse(studentId, 'calculus-1', transcript);
       setAnswer(r.answer);
       if (support.tts) aiStudio.speak(r.answer.slice(0, 400), voiceLang, rate);
     } finally { setLoading(false); }

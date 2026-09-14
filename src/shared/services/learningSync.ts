@@ -145,40 +145,46 @@ export const learningSync = {
   },
 
   /** Persist a learning event: local cache + authoritative backend (idempotent via clientKey). */
-  recordEvent(event: LearningEvent): void {
+  async recordEvent(event: LearningEvent): Promise<void> {
     store.events.append(event as any);
     if (!this.isBackend()) return;
-    void api.learning.recordEvent(toBackendEvent(event)).catch(() => {
+    try {
+      await api.learning.recordEvent(toBackendEvent(event));
+    } catch {
       /* offline / backend unavailable — local cache remains authoritative until next sync */
-    });
+    }
     if (event.clientKey) syncedEvents.add(event.clientKey);
   },
 
   /** Persist a mastery record: local cache + authoritative backend (upsert by studentId+nodeId). */
-  upsertMastery(record: MasteryRecord): void {
+  async upsertMastery(record: MasteryRecord): Promise<void> {
     store.mastery.save(record);
     if (!this.isBackend()) return;
-    void api.learning.upsertMastery(toBackendMastery(record)).catch(() => {
+    try {
+      await api.learning.upsertMastery(toBackendMastery(record));
+    } catch {
       /* best-effort; local cache remains */
-    });
+    }
     syncedMastery.add(`${record.studentId}:${record.nodeId}`);
   },
 
   /** Flush any store mutations made by engines directly (e.g. masteryEngine.ingestEvidence). */
-  flush(studentId: string): void {
+  async flush(studentId: string): Promise<void> {
     if (!this.isBackend()) return;
+    const promises: Promise<void>[] = [];
     for (const e of store.events.listByStudent(studentId)) {
       const key = (e.clientKey as string | undefined) ?? `ev:${e.id}`;
       if (syncedEvents.has(key)) continue;
-      void api.learning.recordEvent(toBackendEvent(e as unknown as LearningEvent)).catch(() => {});
+      promises.push(api.learning.recordEvent(toBackendEvent(e as unknown as LearningEvent)).catch(() => {}));
       syncedEvents.add(key);
     }
     for (const m of store.mastery.listByStudent(studentId)) {
       const key = `${m.studentId}:${m.nodeId}`;
       if (syncedMastery.has(key)) continue;
-      void api.learning.upsertMastery(toBackendMastery(m)).catch(() => {});
+      promises.push(api.learning.upsertMastery(toBackendMastery(m)).catch(() => {}));
       syncedMastery.add(key);
     }
+    await Promise.all(promises);
   },
 
   /** Hydrate the local cache from the authoritative backend (called on login/refresh). */
@@ -200,8 +206,57 @@ export const learningSync = {
     }
   },
 
-  /** Authoritative progress (mastery rollup + recent events) — UI source of truth. */
+   /** Authoritative progress (mastery rollup + recent events) — UI source of truth. */
   getProgress(): Promise<unknown> {
     return api.learning.getProgress();
+  },
+
+  /** Sync plan items to the backend. */
+  async syncPlans(studentId: string): Promise<void> {
+    if (!this.isBackend()) return;
+    const items = store.plans.listByStudent(studentId);
+    const promises = items.map((item) =>
+      api.learning.upsertPlan({
+        id: item.id,
+        kind: item.kind,
+        title: item.title || `${item.kind}`,
+        courseId: item.courseId,
+        lessonId: item.lessonId,
+        topic: item.topic,
+        estimatedMinutes: item.estimatedMinutes,
+        scheduledFor: item.scheduledFor,
+        priority: item.priority || 'medium',
+        status: item.status || 'pending',
+        reason: item.reason,
+      }).catch(() => {})
+    );
+    await Promise.all(promises);
+  },
+
+  /** Update a plan item status in the backend. */
+  async updatePlan(id: string, data: { status?: string }): Promise<void> {
+    if (!this.isBackend()) {
+      const item = store.plans.get(id);
+      if (item && data.status) {
+        store.plans.save({ ...item, status: data.status as any });
+      }
+      return;
+    }
+    void api.learning.updatePlan(id, data).catch(() => {});
+  },
+
+  /** Save exam results to the backend. */
+  async saveExamResult(result: {
+    assessmentId: string;
+    startedAt: string;
+    finishedAt?: string;
+    submitted: boolean;
+    totalQuestions: number;
+    correct: number;
+    score: number;
+    timeUsedSeconds?: number;
+  }): Promise<void> {
+    if (!this.isBackend()) return;
+    await api.learning.saveExamResult(result).catch(() => {});
   },
 };

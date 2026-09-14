@@ -22,7 +22,10 @@ export const trust = {
   },
 
   issueCertificate(studentId: EntityId, studentName: string, courseId: EntityId, courseTitle: string, score?: number) {
-    const verificationCode = `LP-${new Date().getFullYear()}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+    // Deterministic verification code from content (no Math.random: stable + verifiable).
+    const seed = `${studentId}|${courseId}|${score ?? 0}|${nowIso()}`;
+    let codeHash = 0; for (let i = 0; i < seed.length; i++) codeHash = (codeHash * 31 + seed.charCodeAt(i)) >>> 0;
+    const verificationCode = `LP-${new Date().getFullYear()}-${codeHash.toString(36).toUpperCase().padStart(6, '0').slice(-6)}`;
     const payload = `${verificationCode}|${studentId}|${courseId}|${courseTitle}|${nowIso()}`;
     let hash = 0; for (let i = 0; i < payload.length; i++) hash = (hash * 31 + payload.charCodeAt(i)) >>> 0;
     // BUG 2 fix: save() returns void — build the certificate, persist it,

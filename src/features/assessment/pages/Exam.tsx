@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Button } from '../../../shared/components/ui/Button';
 import { Badge } from '../../../shared/components/ui/Badge';
@@ -22,6 +22,7 @@ const CONCEPT_FOR_TOPIC: Record<string, string> = {
 export default function ExamPage() {
   const { t } = useTranslation('assessment');
   const navigate = useNavigate();
+  const params = useParams<{ assessmentId: string }>();
   const { user } = useAuth();
   const studentId = user?.id ?? 'student-local';
 
@@ -53,12 +54,12 @@ export default function ExamPage() {
     return () => clearInterval(timer);
   }, []);
 
-  const recordAnswer = (index: number, choice: number) => {
+  const recordAnswer = async (index: number, choice: number) => {
     const q = bank[index];
     const concept = CONCEPT_FOR_TOPIC[q.topic] ?? 'concept-general';
     const chosen = q.options?.[choice] ?? String(choice);
     const correct = chosen === q.correctAnswer;
-    learningSync.recordEvent({
+    await learningSync.recordEvent({
       id: `ev-${studentId}-exam-${index}`,
       studentId,
       kind: 'question-answered',
@@ -73,10 +74,10 @@ export default function ExamPage() {
     // Project evidence through the mastery engine (real pipeline).
     const nodeType = (q.conceptId ? 'concept' : 'skill') as 'concept' | 'skill';
     masteryEngine.recordQuizResult(studentId, concept, nodeType, correct ? 100 : 0, 120, q.difficulty);
-    learningSync.flush(studentId);
+    await learningSync.flush(studentId);
   };
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (submitted) return;
     setSubmitted(true);
     const correct = bank.reduce((acc, q, i) => {
@@ -86,7 +87,7 @@ export default function ExamPage() {
     const totalQ = bank.length;
     const score = totalQ > 0 ? Math.round((correct / totalQ) * 100) : 0;
 
-    learningSync.recordEvent({
+    await learningSync.recordEvent({
       id: `ev-${studentId}-exam-submitted`,
       studentId,
       kind: 'exam-submitted',
@@ -97,14 +98,22 @@ export default function ExamPage() {
       payload: { score, total: totalQ, correct },
       clientKey: `exam-submit-${studentId}`,
     } as any);
-    learningSync.flush(studentId);
+    await learningSync.flush(studentId);
+    await learningSync.saveExamResult({
+      assessmentId: params.assessmentId ?? 'calculus-1',
+      startedAt: new Date().toISOString(),
+      submitted: true,
+      totalQuestions: totalQ,
+      correct,
+      score,
+    });
 
     navigate(`/results/calculus-1`, { state: { score } });
   };
 
-  const handleSelect = (index: number) => {
+  const handleSelect = async (index: number) => {
     setSelectedAnswers({ ...selectedAnswers, [currentQuestion]: index });
-    recordAnswer(currentQuestion, index);
+    await recordAnswer(currentQuestion, index);
   };
 
   const minutes = Math.floor(timeLeft / 60);

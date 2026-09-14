@@ -14,6 +14,7 @@ import { cn } from '../../../shared/lib/utils';
 import type { UserRole } from '../../../app/types';
 import { ROLE_HOME } from '../../../shared/lib/mockAuth';
 import { useAuth } from '../../../app/layout/AuthProvider';
+import { api } from '../../../shared/services/api';
 
 function GoogleIcon() {
   return (
@@ -121,6 +122,11 @@ export function RoleLoginBody(p: { role: UserRole }) {
   };
   const social = (provider: 'google' | 'github' | 'apple') => {
     setFormErr('');
+    // Google uses the real OAuth flow on the backend; GitHub/Apple remain placeholders.
+    if (provider === 'google') {
+      window.location.href = `${api.baseURL()}/auth/google`;
+      return;
+    }
     setSocialLoading(provider);
     window.setTimeout(() => {
       login(role, email, password).then((ok) => {

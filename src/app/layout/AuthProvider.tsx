@@ -7,6 +7,7 @@ export type { UserRole } from '../types';
 
 interface AuthContextValue {
   authenticated: boolean;
+  ready: boolean;
   role: UserRole;
   user: { id: string; email: string; name: string; role: UserRole } | null;
   login: (role: UserRole, email: string, password: string) => Promise<boolean>;
@@ -24,11 +25,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return false;
     }
   });
+  const [ready, setReady] = useState(false);
   const [role, setRole] = useState<UserRole>('student');
   const [user, setUser] = useState<AuthContextValue['user']>(null);
 
   useEffect(() => {
     const init = async () => {
+      // No token at all → nothing to restore; mark ready immediately.
+      try {
+        if (typeof localStorage === 'undefined' || !localStorage.getItem('lp-auth-token')) {
+          setAuthenticated(false);
+          setUser(null);
+          setReady(true);
+          return;
+        }
+      } catch {
+        /* fall through to /me attempt */
+      }
       try {
         const me = await api.auth.me();
         const u = (me as any).user as AuthContextValue['user'] | undefined;
@@ -38,10 +51,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setUser(u);
           // Hydrate authoritative learning state from the backend (cache only).
           void learningSync.hydrate(u.id);
+        } else {
+          setAuthenticated(false);
+          setUser(null);
         }
       } catch {
         setAuthenticated(false);
         setUser(null);
+      } finally {
+        setReady(true);
       }
     };
     init();
@@ -61,7 +79,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
     } catch {
-      if (process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true') {
+      if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true') {
         const { mockSignInWithPassword } = await import('../../shared/lib/mockAuth');
         const result = mockSignInWithPassword(role, email, password);
         if (result.ok && result.session?.authenticated && result.session.user) {
@@ -89,7 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return true;
       }
     } catch {
-      if (process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true') {
+      if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true') {
         const { mockSignUp } = await import('../../shared/lib/mockAuth');
         const result = mockSignUp(role, name, email);
         if (result.ok && result.session?.authenticated && result.session.user) {
@@ -111,12 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
     localStorage.removeItem('lp-auth-token');
     setAuthenticated(false);
+    setReady(true);
     setRole('student');
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ authenticated, role, user, login, signup, logout }}>
+    <AuthContext.Provider value={{ authenticated, ready, role, user, login, signup, logout }}>
       {children}
     </AuthContext.Provider>
   );

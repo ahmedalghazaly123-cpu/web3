@@ -1,17 +1,22 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../../shared/components/ui/Card';
 import { Badge } from '../../../shared/components/ui/Badge';
 import { EmptyState } from '../../../shared/components/ui/EmptyState';
+import { useAuth } from '../../../app/layout/AuthProvider';
+import { learningSync } from '../../../shared/services/learningSync';
 import { learningEngine } from '../../../shared/services/learning-engine';
 import { knowledgeGraph } from '../../../shared/services/knowledge-graph';
-import { getMockUser } from '../../../shared/lib/mockAuth';
 import { Network } from 'lucide-react';
-
-function sid(): string { return getMockUser()?.id ?? 'student-001'; }
 
 export default function PathsPage() {
   const { t } = useTranslation('hub');
-  const path = learningEngine.dynamicPath(sid(), 'course-calculus-1');
+  const { user } = useAuth();
+  const studentId = user?.id ?? 'student-local';
+
+  useEffect(() => { if (user?.id) void learningSync.hydrate(user.id); }, [user?.id]);
+
+  const path = learningEngine.dynamicPath(studentId, 'course-calculus-1');
   const graph = knowledgeGraph.get();
   const label = (id: string) => graph.nodes.find((n) => n.id === id)?.label ?? id;
   return (

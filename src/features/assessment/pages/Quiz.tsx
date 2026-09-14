@@ -27,7 +27,7 @@ export const calculusQuestionBank: Question[] = calculusQuiz.questions.map((q, i
   const difficulty =
     q.topic === 'Limits' ? (i === 0 ? 1 : 2) : q.topic === 'Continuity' ? 2 : i === 0 ? 3 : 4;
   return {
-    id: q.id,
+    id: String(q.id),
     topic: q.topic,
     type: 'math',
     difficulty,
@@ -35,7 +35,7 @@ export const calculusQuestionBank: Question[] = calculusQuiz.questions.map((q, i
     options: q.options,
     correctOptionIndex: q.correctAnswer,
     correctAnswer: q.options[q.correctAnswer],
-    explanation: q.explanation,
+    explanation: q.explanation ?? '',
     conceptId: CONCEPT_FOR_TOPIC[q.topic] ?? 'concept-general',
     skillId: (CONCEPT_FOR_TOPIC[q.topic] ?? 'concept-general').replace('concept-', 'skill-'),
   };
@@ -87,7 +87,7 @@ export default function QuizPage() {
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timer);
-          handleSubmit();
+          void handleSubmit();
           return 0;
         }
         return prev - 1;
@@ -96,10 +96,10 @@ export default function QuizPage() {
     return () => clearInterval(timer);
   }, [started, session]);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     const score = total > 0 ? Math.round((correctCount / total) * 100) : 0;
     if (session) {
-      learningSync.recordEvent({
+      await learningSync.recordEvent({
         id: `ev-${studentId}-quiz-submitted-${session.id}`,
         studentId,
         kind: 'quiz-submitted',
@@ -111,17 +111,17 @@ export default function QuizPage() {
         payload: { score, total, correct: correctCount },
         clientKey: `quiz-submit-${session.id}`,
       } as any);
-      learningSync.flush(studentId);
+      await learningSync.flush(studentId);
     }
     navigate(`/results/${params.assessmentId ?? 'quiz-1'}`, { state: { score } });
   };
 
-  const handleSelect = (index: number) => {
+  const handleSelect = async (index: number) => {
     if (selected !== null) return;
     setSelected(index);
   };
 
-  const handleNext = () => {
+  const handleNext = async () => {
     if (!current || selected === null || !session) return;
     const q = current.question;
     const chosen = q.options?.[selected] ?? String(selected);
@@ -129,15 +129,33 @@ export default function QuizPage() {
     const elapsed = Math.max(1, 900 - timeLeft);
     const result = processAnswer(session, current, chosen, elapsed);
 
+    // Emit question-answered event for each answer through the learning pipeline
+    await learningSync.recordEvent({
+      id: `ev-${studentId}-quiz-q${idx}-${session.id}`,
+      studentId,
+      kind: 'question-answered',
+      source: 'assessment',
+      happenedAt: new Date().toISOString(),
+      nodeId: q.conceptId ?? q.skillId ?? session.config.targetNodeId,
+      nodeType: q.conceptId ? 'concept' : q.skillId ? 'skill' : 'topic',
+      questionId: q.id,
+      sessionId: session.id,
+      payload: {
+        selectedAnswer: chosen,
+        correct: result.correct,
+        timeSpentSeconds: elapsed,
+        mode: 'adaptive',
+      },
+      clientKey: `adaptive-${session.id}-${q.id}`,
+    } as any);
+    await learningSync.flush(studentId);
+
     const countAfter = total + 1;
     const correctAfter = correctCount + (result.correct ? 1 : 0);
     setTotal(countAfter);
     setCorrectCount(correctAfter);
     setSelected(null);
     setTimeLeft(900);
-
-    // Persist this question's event + mastery update to the backend (idempotent).
-    learningSync.flush(studentId);
 
     if (result.shouldStop || countAfter >= session.config.maxQuestions) {
       handleSubmit();

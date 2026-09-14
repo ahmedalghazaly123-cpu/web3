@@ -1,40 +1,42 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Card } from '../../../shared/components/ui/Card';
 import { Button } from '../../../shared/components/ui/Button';
 import { Badge } from '../../../shared/components/ui/Badge';
 import { EmptyState } from '../../../shared/components/ui/EmptyState';
 import { ProgressBar } from '../../../shared/components/ui/ProgressBar';
-import { getMockUser } from '../../../shared/lib/mockAuth';
+import { useAuth } from '../../../app/layout/AuthProvider';
+import { learningSync } from '../../../shared/services/learningSync';
 import { learningEngine } from '../../../shared/services/learning-engine';
 import { productivity } from '../../../shared/services/productivity';
 import { CheckCircle, XCircle, BrainCircuit } from 'lucide-react';
 
-function sid(): string { return getMockUser()?.id ?? 'student-001'; }
-
 export default function AdaptivePage() {
   const { t } = useTranslation('hub');
+  const { user } = useAuth();
+  const studentId = user?.id ?? 'student-local';
   const [topic, setTopic] = useState<string>('');
-  const [q, setQ] = useState(() => learningEngine.nextQuestion(sid(), 'course-calculus-1', undefined));
+  const [q, setQ] = useState(() => learningEngine.nextQuestion(studentId, 'course-calculus-1', undefined));
   const [choice, setChoice] = useState<number | null>(null);
   const [result, setResult] = useState<{ correct: boolean; nextDifficulty: number } | null>(null);
   const [streak, setStreak] = useState(0);
+  useEffect(() => { if (user?.id) void learningSync.hydrate(user.id); }, [user?.id]);
 
   const topics = useMemo(() => [...new Set(learningEngine.questionBank().map((x) => x.topic))], []);
 
   const submit = () => {
     if (choice === null) return;
-    const r = learningEngine.answer(sid(), 'course-calculus-1', 'course', q, choice, 12);
+    const r = learningEngine.answer(studentId, 'course-calculus-1', 'course', q, choice, 12);
     setResult(r);
     if (r.correct) {
       setStreak((s) => s + 1);
-      productivity.awardXp(sid(), 10 * q.difficulty, 'adaptive-correct');
-      learningEngine.scheduleReview(sid(), 'course-calculus-1', 4);
+      productivity.awardXp(studentId, 10 * q.difficulty, 'adaptive-correct');
+      learningEngine.scheduleReview(studentId, 'course-calculus-1', 4);
     } else setStreak(0);
   };
 
   const next = () => {
-    setQ(learningEngine.nextQuestion(sid(), 'course-calculus-1', topic || undefined));
+    setQ(learningEngine.nextQuestion(studentId, 'course-calculus-1', topic || undefined));
     setChoice(null);
     setResult(null);
   };

@@ -9,6 +9,30 @@ import { RoleProvider } from './app/router';
 import { ThemeProvider } from './app/layout/ThemeProvider';
 import './styles/index.css';
 
+async function registerSW() {
+  if ('serviceWorker' in navigator) {
+    try {
+      const registration = await navigator.serviceWorker.register('/sw.ts');
+      registration.addEventListener('updatefound', () => {
+        const installingWorker = registration.installing;
+        if (installingWorker) {
+          installingWorker.addEventListener('statechange', () => {
+            if (installingWorker.state === 'installed') {
+              if (navigator.onLine) {
+                navigator.serviceWorker.getRegistrations().then((regs) => {
+                  regs.forEach((r) => r.update());
+                });
+              }
+            }
+          });
+        }
+      });
+    } catch (err) {
+      console.error('SW registration failed:', err);
+    }
+  }
+}
+
 function Root() {
   const { i18n } = useTranslation();
 
@@ -20,6 +44,8 @@ function Root() {
 
   return <App />;
 }
+
+registerSW();
 
 createRoot(document.getElementById('root')!).render(
     <StrictMode>

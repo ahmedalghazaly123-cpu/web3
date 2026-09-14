@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Card } from '../../../shared/components/ui/Card';
@@ -7,15 +7,14 @@ import { Badge } from '../../../shared/components/ui/Badge';
 import { EmptyState } from '../../../shared/components/ui/EmptyState';
 import { ProgressBar } from '../../../shared/components/ui/ProgressBar';
 import { useToast } from '../../../shared/components/ui/ToastProvider';
-import { getMockUser } from '../../../shared/lib/mockAuth';
+import { useAuth } from '../../../app/layout/AuthProvider';
 import { store } from '../../../shared/services/store';
 import { masteryEngine } from '../../../shared/services/mastery';
 import { knowledgeGraph } from '../../../shared/services/knowledge-graph';
 import { learningEngine } from '../../../shared/services/learning-engine';
 import { productivity } from '../../../shared/services/productivity';
+import { learningSync } from '../../../shared/services/learningSync';
 import { BrainCircuit, Mic, MessagesSquare, Search, Network, GraduationCap, Trophy, Timer, Sparkles } from 'lucide-react';
-
-function sid(): string { return getMockUser()?.id ?? 'student-001'; }
 
 const tiles = [
   { to: '/ai-tutor', icon: <BrainCircuit className="w-5 h-5" />, key: 'aiTutor' },
@@ -32,16 +31,25 @@ const tiles = [
 export default function HubPage() {
   const { t } = useTranslation('hub');
   const toast = useToast();
+  const { user } = useAuth();
+  const studentId = user?.id ?? 'student-local';
   const [seeded, setSeeded] = useState(false);
-  const mastery = store.mastery.listByStudent(sid());
+
+  useEffect(() => {
+    if (user?.id) void learningSync.hydrate(user.id);
+  }, [user?.id]);
+
+  const mastery = store.mastery.listByStudent(studentId);
   const avg = mastery.length ? Math.round(mastery.reduce((a, r) => a + r.mastery, 0) / mastery.length) : 0;
-  const due = learningEngine.dueReviews(sid()).length;
-  const mistakes = store.mistakes.listByStudent(sid()).length;
+  const due = learningEngine.dueReviews(studentId).length;
+  const mistakes = store.mistakes.listByStudent(studentId).length;
 
   const seed = () => {
     knowledgeGraph.seedDemo();
-    masteryEngine.seedDemoData(sid(), knowledgeGraph.get().nodes.slice(0, 8).map((n) => ({ id: n.id, type: n.type, mastery: 30 + Math.floor(Math.random() * 55) })));
-    productivity.bumpStreak(sid());
+    // Deterministic demo levels (no Math.random: stable, reviewable seed).
+    const levels = [42, 55, 38, 61, 47, 58, 35, 66];
+    masteryEngine.seedDemoData(studentId, knowledgeGraph.get().nodes.slice(0, 8).map((n, i) => ({ id: n.id, type: n.type, mastery: levels[i % levels.length] })));
+    productivity.bumpStreak(studentId);
     setSeeded(true);
     toast({ variant: 'success', title: t('seeded'), description: t('seededDesc') });
   };

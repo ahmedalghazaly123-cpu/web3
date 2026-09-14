@@ -1,7 +1,7 @@
 // Phases 24-36 quality gates.
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { store, storeBackend } from '../../services/store.ts';
-import { awardMeaningfulXp, focusSummary } from '../engagement.ts';
+import { awardMeaningfulXp, focusSummary, resetIdempotency } from '../engagement.ts';
 import { createStudyRoom, logClassroomAttendance } from '../collaboration.ts';
 import { teacherInsights, parentSnapshot, institutionCohorts } from '../stakeholders.ts';
 import { productionEngine } from '../production.ts';
@@ -9,13 +9,14 @@ import { productionEngine } from '../production.ts';
 const SID = 'student-prod-1';
 const T0 = '2026-06-04T10:00:00.000Z';
 
-beforeEach(() => { storeBackend.useInMemory(); store.clearAll(); });
+beforeEach(() => { storeBackend.useInMemory(); store.clearAll(); resetIdempotency(); });
 afterEach(() => { storeBackend.useLocalStorage(); });
 
 describe('phases 24-36', () => {
-  it('gamification rewards meaningful behavior', () => {
-    const xp = awardMeaningfulXp(SID, 'correct', T0);
-    expect(xp).toBe(10);
+  it('gamification rewards meaningful behavior', async () => {
+    const xp = await awardMeaningfulXp(SID, 'correct', T0);
+    expect(xp.xp).toBe(10);
+    expect(xp.awarded).toBe(true);
   });
   it('focus summary aggregates sessions', () => {
     store.sessions.save({ id: 's1', studentId: SID, startedAt: T0, intendedMinutes: 25, actualMinutes: 25, topic: 'Limits', completed: true });

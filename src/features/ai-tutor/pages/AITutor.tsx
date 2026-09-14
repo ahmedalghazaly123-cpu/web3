@@ -1,13 +1,14 @@
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { Badge } from '../../../shared/components/ui/Badge';
 import { Avatar } from '../../../shared/components/ui/Avatar';
 import { Card } from '../../../shared/components/ui/Card';
 import { IconBox } from '../../../shared/components/ui/IconBox';
+import { useAuth } from '../../../app/layout/AuthProvider';
+import { learningSync } from '../../../shared/services/learningSync';
 import { aiGateway } from '../../../shared/services/ai-gateway';
 import { store } from '../../../shared/services/store';
-import { getMockUser } from '../../../shared/lib/mockAuth';
 import { BrainCircuit, Send, Paperclip, Mic, Sparkles, Lightbulb, HelpCircle, ListChecks, FileText, BookOpen, Target, History } from 'lucide-react';
 
 interface AIMessage {
@@ -30,7 +31,9 @@ const quickActions = [
 
 export default function AITutorPage() {
   const { t, i18n } = useTranslation('ai-tutor');
-  const sid = getMockUser()?.id ?? 'student-001';
+  const { user } = useAuth();
+  const sid = user?.id ?? 'student-local';
+  useEffect(() => { if (user?.id) void learningSync.hydrate(user.id); }, [user?.id]);
   const [mode, setMode] = useState<'explain' | 'hint' | 'socratic' | 'step-by-step' | 'exam-prep' | 'revision'>('explain');
   const [loading, setLoading] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);

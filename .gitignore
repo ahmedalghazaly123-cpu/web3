@@ -33,27 +33,13 @@ server/.env.*
 
 # Local secrets and generated artifacts
 server/.env.bak
-'
-playwright-report/
-test-results/
-
-
-# Local secrets and generated artifacts
-server/.env.bak
-'
 playwright-report/
 test-results/
 *.tsbuildinfo
 tsc-*.txt
 vitest-out.txt
 
-
-# Local secrets and generated artifacts
-server/.env.bak
-'
-playwright-report/
-test-results/
-*.tsbuildinfo
-tsc-*.txt
-vitest-out.txt
+screenshots/
+# Screenshots (regenerable via Playwright)
+# Server runtime logs
 

@@ -12,19 +12,6 @@ import type { MasteryRecord } from '../../../shared/domain';
 
 interface ScoreInfo { correct: number; total: number; score: number }
 
-function readStoredScore(): ScoreInfo | null {
-  try {
-    const raw = localStorage.getItem('lastQuizScore');
-    const parsed = raw ? JSON.parse(raw) : null;
-    if (parsed && typeof parsed.correct === 'number' && typeof parsed.total === 'number' && parsed.total > 0) {
-      return { correct: parsed.correct, total: parsed.total, score: Math.round((parsed.correct / parsed.total) * 100) };
-    }
-  } catch {
-    /* corrupted storage */
-  }
-  return null;
-}
-
 const WEAK_TOPIC_LABEL: Record<string, string> = {
   'concept-limits': 'Limits',
   'concept-derivatives': 'Derivatives',
@@ -46,24 +33,17 @@ export default function ResultsPage() {
     const load = async () => {
       if (studentId) {
         await learningSync.hydrate(studentId);
-        // Authoritative: derive the latest quiz/submitted score from the backend event log.
         const events = store.events.listByStudent(studentId);
         const submitted = [...events].reverse().find((e: any) => e.kind === 'quiz-submitted' || e.kind === 'exam-submitted');
         const p = submitted?.payload as { score?: number; total?: number; correct?: number } | undefined;
         if (p && typeof p.score === 'number' && typeof p.total === 'number') {
           setScore({ correct: p.correct ?? 0, total: p.total, score: p.score });
-        } else {
-          // Fallback to persisted mastery % if no submission event is on record.
-          setScore(null);
         }
         const progress = await learningSync.getProgress() as { masteryPercent?: number } | null;
         setMasteryPercent(progress?.masteryPercent ?? 0);
         setWeakTopics(
           store.mastery.listByStudent(studentId).filter((m) => (m.mastery ?? 0) < 60),
         );
-      } else {
-        // No backend session: keep read-only display from any local cache.
-        setScore(readStoredScore());
       }
       setLoading(false);
     };
@@ -80,9 +60,9 @@ export default function ResultsPage() {
     );
   }
 
-  const correctAnswers = score?.correct ?? (studentId ? 0 : readStoredScore()?.correct ?? 0);
-  const totalQuestions = score?.total ?? (studentId ? 0 : readStoredScore()?.total ?? 4);
-  const displayScore = score?.score ?? Math.round((correctAnswers / (totalQuestions || 1)) * 100);
+  const correctAnswers = score?.correct ?? 0;
+  const totalQuestions = score?.total ?? 0;
+  const displayScore = score?.score ?? 0;
   const passed = displayScore >= 70;
 
   return (
@@ -98,11 +78,9 @@ export default function ResultsPage() {
           <p className="body text-text-secondary max-w-md mx-auto">
             {t('resultsPage.answeredOf', { correct: correctAnswers, total: totalQuestions })}
             {passed ? t('resultsPage.passedSuffix') : t('resultsPage.failedSuffix')}
-            <span className="block text-caption text-text-tertiary mt-1">
-              {studentId
-                ? t('resultsPage.authoritative', { mastery: masteryPercent })
-                : t('resultsPage.offlineFallback')}
-            </span>
+              <span className="block text-caption text-text-tertiary mt-1">
+                {t('resultsPage.authoritative', { mastery: masteryPercent })}
+              </span>
           </p>
         </div>
 

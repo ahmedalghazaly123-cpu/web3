@@ -278,22 +278,24 @@ export const masteryEngine = {
     store.mastery.listByStudent(studentId).forEach((r) => store.mastery.remove(r.id));
   },
 
-  /** Initialize demo mastery data for a student across a set of nodes. */
+  /** Initialize demo mastery data for a student across a set of nodes. Deterministic. */
   seedDemoData: (
     studentId: EntityId,
     nodes: Array<{ id: EntityId; type: GraphNodeType; mastery?: number }>
   ): MasteryRecord[] => {
     const records: MasteryRecord[] = [];
-    for (const n of nodes) {
+    for (let i = 0; i < nodes.length; i++) {
+      const n = nodes[i];
+      // Deterministic pseudo-values derived from index (no Math.random: stable seeds).
       const record: MasteryRecord = {
         id: `mastery-${studentId}-${n.id}`,
         studentId,
         nodeId: n.id,
         nodeType: n.type,
         mastery: n.mastery ?? 50,
-        attempts: Math.floor(Math.random() * 10) + 1,
-        lastPracticedAt: new Date(Date.now() - Math.random() * 7 * 24 * 60 * 60 * 1000).toISOString(),
-        confidence: 30 + Math.floor(Math.random() * 40),
+        attempts: (i % 10) + 1,
+        lastPracticedAt: new Date(Date.now() - i * 24 * 60 * 60 * 1000).toISOString(),
+        confidence: 30 + ((i * 7) % 40),
         weak: (n.mastery ?? 50) < 50,
         mastered: (n.mastery ?? 50) >= 80,
         updatedAt: nowIso(),

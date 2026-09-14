@@ -35,7 +35,9 @@ export function assessRisk(studentId: EntityId, nowIso: string): RiskAssessment 
 
   const lastActivity = records.reduce((m, r) => Math.max(m, new Date(r.lastPracticedAt).getTime() || 0), 0);
   const idleDays = lastActivity ? (now - lastActivity) / 86_400_000 : 99;
-  if (idleDays > 7) signals.push({ signal: 'inactivity', detail: `No learning activity for ${Math.floor(idleDays)} days.`, weight: KIND_WEIGHT.inactivity });
+  // A student with no mastery records has never been active — inactivity does
+  // not apply. Only flag inactivity for students who have established activity.
+  if (records.length > 0 && idleDays > 7) signals.push({ signal: 'inactivity', detail: `No learning activity for ${Math.floor(idleDays)} days.`, weight: KIND_WEIGHT.inactivity });
   else if (idleDays > 3 && records.length > 0) signals.push({ signal: 'inactivity', detail: `Activity gap of ${Math.floor(idleDays)} days.`, weight: 8 });
 
   const overdue = store.reviews.listDue(studentId, nowIso);

@@ -4,6 +4,7 @@ import { Routes, Route, Outlet, Navigate } from 'react-router-dom';
 import HomePage from '@features/home/pages/Home';
 import AccountTypePage from '@features/auth/pages/AccountType';
 import LoginRoute from '@features/auth/pages/LoginRoute';
+import GoogleCallback from '@features/auth/pages/GoogleCallback';
 
 // Student pages
 import StudentDashboard from '@features/student/pages/Dashboard';
@@ -74,6 +75,7 @@ function App() {
         {/* Pre-login entry: choose account type, then role-specific login */}
         <Route path="/account-type" element={<AccountTypePage />} />
         <Route path="/login/:role" element={<LoginRoute />} />
+        <Route path="/auth/google/callback" element={<GoogleCallback />} />
         {/* Legacy aliases — redirect into the new flow (no direct /login) */}
         <Route path="/login" element={<Navigate to="/account-type" replace />} />
         <Route path="/register" element={<Navigate to="/account-type" replace />} />

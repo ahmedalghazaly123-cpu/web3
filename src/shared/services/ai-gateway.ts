@@ -160,7 +160,7 @@ function _demoResponse(req: AiRequest): AiResponse {
     ok: true,
     content: text,
     model: 'demo',
-    latencyMs: 400 + Math.floor(Math.random() * 600),
+    latencyMs: 400,
     costUsd: 0,
     provider: 'local-demo' as AiProvider,
     usedCache: false,
@@ -241,7 +241,52 @@ export const aiGateway = {
   /** Call the AI with a request. Returns AiResponse. */
   send: (req: AiRequest): Promise<AiResponse> => {
     return new Promise((resolve) => {
-      // 1. PII redaction
+      // If backend is available, proxy through it (real provider or demo fallback)
+      if (typeof localStorage !== 'undefined' && localStorage.getItem('lp-auth-token')) {
+        void (async () => {
+          try {
+            const token = localStorage.getItem('lp-auth-token');
+            const res = await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1'}/ai/generate`, {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${token}`,
+              },
+              body: JSON.stringify({
+                prompt: req.prompt,
+                mode: req.mode,
+                courseId: req.courseId,
+                lessonId: req.lessonId,
+                studentId: req.studentId,
+                language: req.language,
+              }),
+            });
+            if (res.ok) {
+              const data = await res.json();
+              resolve({
+                ok: true,
+                content: data.content,
+                model: data.model,
+                latencyMs: data.latencyMs ?? 0,
+                costUsd: data.costUsd ?? 0,
+                provider: data.provider ?? 'unknown',
+                usedCache: data.usedCache ?? false,
+                safetyPassed: data.safetyPassed ?? true,
+                error: data.error,
+              });
+              return;
+            }
+          } catch {
+            // fall through to demo
+          }
+          // Fallback to demo response
+          const response = _demoResponse(req);
+          resolve(response);
+        })();
+        return;
+      }
+
+      // 1. PII redaction (local demo mode)
       const sanitizedPrompt = featureFlags.isEnabled('ai_safety')
         ? redactPII(req.prompt)
         : req.prompt;

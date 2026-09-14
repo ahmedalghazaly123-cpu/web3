@@ -20,7 +20,7 @@ export default defineConfig({
     tsconfig: './tsconfig.json',
 
     // Only run intelligence unit tests in this suite.
-    include: ['src/shared/intelligence/__tests__/*.test.ts'],
+    include: ['src/shared/intelligence/__tests__/*.test.ts', 'src/shared/services/learningSync.test.ts'],
 
     // Global test APIs (describe/it/expect) available without explicit imports.
     globals: true,

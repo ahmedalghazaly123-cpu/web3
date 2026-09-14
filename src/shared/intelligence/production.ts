@@ -59,11 +59,16 @@ export function scoreAiAnswer(answer: string, source: string): { relevance: numb
 
 export function securityAudit(): Array<{ area: string; status: string }> {
   return [
-    { area: 'auth/RBAC', status: 'PARTIAL — frontend role UX + store-level checks; no real backend sessions yet.' },
-    { area: 'input validation', status: 'PARTIAL — domain engines validate; no API boundary yet.' },
+    { area: 'auth/RBAC', status: 'COMPLETE — backend bcrypt sessions + HMAC tokens; RBAC + IDOR enforced server-side; frontend role derived from backend.' },
+    { area: 'input validation', status: 'COMPLETE — Zod validation on all backend endpoints; Prisma parameterized queries.' },
     { area: 'sandbox', status: 'FOUNDATION — static verdict only; no isolated execution.' },
-    { area: 'AI safety', status: 'PARTIAL — PII redact + unsafe-phrase guard in gateway stub.' },
-    { area: 'privacy', status: 'PARTIAL — localStorage only; no retention/deletion API yet.' },
+    { area: 'AI gateway', status: 'REAL — frontend proxies to /api/v1/ai/generate; backend calls OpenAI/Anthropic via server-side keys (no key exposure to client). Fallback to demo responses when no keys configured.' },
+    { area: 'RAG/semantic search', status: 'REAL — pgvector similarity search via /api/v1/learning/rag/search with keyword fallback when pgvector unavailable.' },
+    { area: 'AI safety', status: 'PARTIAL — PII redact + unsafe-phrase guard in gateway; real provider keys never exposed to frontend.' },
+    { area: 'privacy', status: 'PARTIAL — localStorage cache + backend persistence; retention/deletion API pending.' },
+    { area: 'audit logging', status: 'COMPLETE — AuditLog table + AuditLogService; writes on auth events, learning events, AI requests, and RAG queries.' },
+    { area: 'CSRF', status: 'NOT REQUIRED — auth via Authorization header (not cookies); no cookie-based CSRF surface.' },
+    { area: 'cookie security', status: 'DOCUMENTED — auth via Bearer token in Authorization header; cookies only used in backend integration tests. Production should use Secure, HttpOnly, SameSite cookies if switching to cookie-based auth.' },
   ];
 }
 
