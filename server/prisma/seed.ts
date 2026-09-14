@@ -69,6 +69,25 @@ async function seed() {
         type: 'VIDEO',
         durationMinutes: 25,
         order: 1,
+        content: 'A limit describes the value a function approaches as the input approaches a point. For continuous functions, direct substitution works. If substitution yields the indeterminate form zero over zero, factor and cancel, then substitute again. One-sided limits approach from the left or the right; the two-sided limit exists only when both one-sided limits agree. Example: the limit of (x^2 - 1)/(x - 1) as x approaches 1 equals 2, found by factoring into (x-1)(x+1) and cancelling.',
+      },
+    });
+
+    await prisma.lesson.upsert({
+      where: { id: 'seed-lesson-deriv-power' },
+      update: {},
+      create: {
+        id: 'seed-lesson-deriv-power',
+        moduleId: 'seed-module-derivatives',
+        courseId: course.id,
+        title: 'Derivatives and the Power Rule',
+        titleAr: 'المشتقات وقاعدة القوة',
+        description: 'Instantaneous rate of change and the power rule.',
+        type: 'VIDEO',
+        durationMinutes: 30,
+        order: 1,
+        content: 'The derivative measures the instantaneous rate of change of a function. The power rule states d/dx of x^n equals n times x to the power n minus 1, valid for any real exponent. The derivative of a constant is zero. The sum rule allows differentiating term by term. The product rule combines two functions. The chain rule handles composition of functions. For example, the derivative of x cubed is three x squared, and the derivative of sin x is cos x.',
+
         content: 'A limit describes the value a function approaches as the input approaches a point.',
       },
     });

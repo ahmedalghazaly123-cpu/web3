@@ -20,6 +20,7 @@ import assessmentsRoutes from './routes/assessments.js';
 import adminRoutes from './routes/admin.js';
 import ownerRoutes from './routes/owner.js';
 import privacyRoutes from './routes/privacy.js';
+import ragRoutes from './routes/rag.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
 import { startRetentionScheduler } from './services/retentionScheduler.js';
@@ -73,6 +74,7 @@ app.use('/api/v1/assessments', assessmentsRoutes);
 app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/owner', ownerRoutes);
 app.use('/api/v1/privacy', privacyRoutes);
+app.use('/api/v1/rag', ragRoutes);
 
 app.use(errorHandler);
 

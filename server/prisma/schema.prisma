@@ -127,6 +127,7 @@ model Course {
 
   modules      Module[]
   lessons      Lesson[]
+  ragChunks    RagChunk[]
   enrollments  Enrollment[]
   assessments  Assessment[]
 
@@ -163,6 +164,7 @@ model Lesson {
 
   module   Module        @relation(fields: [moduleId], references: [id], onDelete: Cascade)
   course   Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  ragChunks RagChunk[]
   questions Question[]
 
   @@map("lessons")
@@ -754,6 +756,25 @@ model AttentionSnapshot {
   createdAt   DateTime @default(now())
 
   @@map("attention_snapshots")
+}
+
+model RagChunk {
+  id             String   @id @default(uuid())
+  courseId       String
+  lessonId       String?
+  chunkIdx       Int
+  text           String
+  textAr         String?
+  embedding      Json?
+  embeddingModel String?
+  createdAt      DateTime @default(now())
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  lesson Lesson? @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+
+  @@index([courseId])
+  @@index([lessonId])
+  @@map("rag_chunks")
 }
 
 model AiProviderConfig {
