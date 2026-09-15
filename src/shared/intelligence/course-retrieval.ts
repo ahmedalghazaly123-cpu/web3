@@ -1,12 +1,12 @@
-// Phase 13: Ask-Your-Course retrieval with real pgvector similarity search.
-// Falls back to keyword matching in demo mode.
+// Phase 13: Ask-Your-Course retrieval.
+// Primary: real RAG backend (/rag/ask → HuggingFace embeddings + grounded LLM).
+// Fallback: keyword matching over demo chunks when RAG is unindexed/unavailable.
 import type { EntityId } from '../domain';
 import { api } from '../services/api.ts';
-import { featureFlags } from '../services/feature-flags.ts';
 
 export interface CourseChunk { id: EntityId; lessonId?: EntityId; text: string; }
 
-export interface GroundedAnswer { answer: string; citations: string[]; grounded: boolean; }
+export interface GroundedAnswer { answer: string; citations: string[]; grounded: boolean; model?: string | null; }
 
 function tokens(s: string): Set<string> {
   return new Set(s.toLowerCase().replace(/[^a-z0-9\s]/g, ' ').split(/\s+/).filter((w) => w.length > 2));
@@ -31,45 +31,25 @@ function keywordSearch(question: string, chunks: CourseChunk[]): { chunk: Course
   return { chunk: best, hit: bestHit };
 }
 
-async function vectorSearch(question: string, courseId?: string): Promise<CourseChunk[] | null> {
-  const token = typeof localStorage !== 'undefined' ? localStorage.getItem('lp-auth-token') : null;
-  if (!token) return null;
-
-  try {
-    const res = await fetch(
-      `${api.baseURL()}/learning/rag/search`,
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ query: question, courseId, limit: 5 }),
-      },
-    );
-
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.chunks as CourseChunk[];
-  } catch {
-    return null;
-  }
-}
-
 export async function askCourse(question: string, courseId?: string): Promise<GroundedAnswer> {
-  // Try real pgvector search first if authenticated
-  if (featureFlags.isEnabled('semantic_search')) {
-    const chunks = await vectorSearch(question, courseId);
-    if (chunks && chunks.length > 0) {
-      return {
-        answer: chunks.map((c) => c.text).join(' '),
-        citations: chunks.map((c) => c.id),
-        grounded: true,
-      };
+  // Primary: real RAG backend — grounded answer + citations, or no_evidence.
+  if (courseId) {
+    try {
+      const data = await api.rag.ask(question, courseId);
+      if (data.grounded && data.answer) {
+        return {
+          answer: data.answer,
+          citations: data.citations ?? [],
+          grounded: true,
+          model: data.model ?? null,
+        };
+      }
+    } catch {
+      // RAG unavailable (404/not indexed/network) → fall through to keyword.
     }
   }
 
-  // Fallback to keyword search on demo chunks (or stored chunks)
+  // Fallback to keyword search on demo chunks (safe when RAG is down/unindexed).
   const chunks = DEMO_CHUNKS;
   const result = keywordSearch(question, chunks);
 

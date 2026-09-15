@@ -1,7 +1,8 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
-import { auditLogService } from '../services/index.js';
+import { auditLogService, aiService } from '../services/index.js';
+import { AiMode, MessageRole, UsageStatus } from '@prisma/client';
 
 const router = Router();
 
@@ -278,6 +279,28 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
       completionTokens = data.eval_count;
     }
 
+    // Persist a usage/cost record so /ai/usage reflects real provider spend.
+    try {
+      await aiService.recordUsage({
+        studentId: userId,
+        feature: `tutor:${mode}`,
+        provider: (usedProvider.name === 'local-demo' ? 'LOCAL_DEMO' : 'GATEWAY_PRIMARY') as any,
+        model: usedProvider.model,
+        promptTokens,
+        completionTokens,
+        costUsd: promptTokens && completionTokens
+          ? ((completionTokens * 0.000002) + (promptTokens * 0.0000005))
+          : 0,
+        latencyMs: 0,
+        happenedAt: new Date(),
+        status: UsageStatus.OK,
+        courseId: req.body?.courseId,
+      });
+    } catch (e) {
+      // Usage tracking is best-effort; a failure should not break the response.
+      console.error('[ai] usage record failed:', e instanceof Error ? e.message : e);
+    }
+
     res.json({
       ok: true,
       content,
@@ -372,5 +395,123 @@ router.get('/status', authMiddleware, async (_req: Request, res: Response) => {
   });
 });
 
+
+// ── Conversations persistence (aiService is wired here) ──────────────────────
+
+// GET /api/v1/ai/conversations — list current student's conversations
+router.get('/conversations', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const conversations = await aiService.listConversations(userId, limit);
+    res.json({ conversations });
+  } catch (e: any) {
+    console.error('List conversations error:', e);
+    res.status(500).json({ error: 'internal-server-error' });
+  }
+});
+
+// POST /api/v1/ai/conversations — create a new conversation
+router.post('/conversations', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    const body = z.object({
+      title: z.string().min(1).max(200),
+      titleAr: z.string().optional(),
+      mode: z.enum(['EXPLAIN', 'HINT', 'SOCRATIC', 'STEP_BY_STEP', 'EXAM_PREP', 'REVISION', 'ERROR_EXPLANATION', 'FULL_SOLUTION', 'GUIDED_SOLUTION', 'ASSIST']).default('ASSIST'),
+      courseId: z.string().optional(),
+      lessonId: z.string().optional(),
+      tags: z.array(z.string()).optional(),
+    }).parse(req.body);
+    const conversation = await aiService.createConversation({
+      studentId: userId,
+      title: body.title,
+      titleAr: body.titleAr,
+      mode: body.mode as AiMode,
+      courseId: body.courseId,
+      lessonId: body.lessonId,
+      tags: body.tags ?? [],
+    });
+    void auditLogService.log({
+      action: 'ai.createConversation',
+      targetType: 'ai_conversation',
+      targetId: conversation.id,
+      actorId: userId,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') ?? undefined,
+      metadata: { mode: body.mode, courseId: body.courseId },
+    });
+    res.status(201).json({ conversation });
+  } catch (e: any) {
+    console.error('Create conversation error:', e);
+    res.status(400).json({ error: e?.message ?? 'validation' });
+  }
+});
+
+// GET /api/v1/ai/conversations/:id — conversation with full message history (ownership enforced)
+router.get('/conversations/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    const conversation = await aiService.getConversation(req.params.id, userId);
+    res.json({ conversation });
+  } catch (e: any) {
+    if (e?.message === 'forbidden') return res.status(403).json({ error: 'forbidden' });
+    console.error('Get conversation error:', e);
+    res.status(500).json({ error: 'internal-server-error' });
+  }
+});
+
+// POST /api/v1/ai/conversations/:id/messages — append a message to a conversation
+router.post('/conversations/:id/messages', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    const body = z.object({
+      role: z.enum(['USER', 'AI']),
+      content: z.string().min(1),
+      mode: z.enum(['EXPLAIN', 'HINT', 'SOCRATIC', 'STEP_BY_STEP', 'EXAM_PREP', 'REVISION', 'ERROR_EXPLANATION', 'FULL_SOLUTION', 'GUIDED_SOLUTION', 'ASSIST']).optional(),
+      citations: z.array(z.string()).optional(),
+      sourceLessonId: z.string().optional(),
+      model: z.string().optional(),
+      latencyMs: z.number().optional(),
+      costUsd: z.number().optional(),
+    }).parse(req.body);
+    // Ownership check before appending.
+    await aiService.getConversation(req.params.id, userId);
+    const message = await aiService.addMessage({
+      conversationId: req.params.id,
+      studentId: userId,
+      role: body.role as MessageRole,
+      content: body.content,
+      mode: body.mode as AiMode | undefined,
+      citations: body.citations ?? [],
+      sourceLessonId: body.sourceLessonId,
+      model: body.model,
+      latencyMs: body.latencyMs,
+      costUsd: body.costUsd,
+    });
+    res.status(201).json({ message });
+  } catch (e: any) {
+    if (e?.message === 'forbidden') return res.status(403).json({ error: 'forbidden' });
+    console.error('Add message error:', e);
+    res.status(400).json({ error: e?.message ?? 'validation' });
+  }
+});
+
+// GET /api/v1/ai/usage — current student's AI usage & cost summary
+router.get('/usage', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = req.userId;
+    if (!userId) return res.status(401).json({ error: 'unauthorized' });
+    const summary = await aiService.usageSummary(userId);
+    res.json({ usage: summary });
+  } catch (e: any) {
+    console.error('Usage summary error:', e);
+    res.status(500).json({ error: 'internal-server-error' });
+  }
+});
 
 export default router;

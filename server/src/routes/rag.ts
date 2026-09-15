@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
-import { Role } from '@prisma/client';
+import { Role, Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import { ragService } from '../services/ragService.js';
 
@@ -64,7 +64,7 @@ router.get('/status/:courseId', authMiddleware, async (req: Request, res: Respon
   try {
     const courseId = req.params.courseId;
     const chunks = await prisma.ragChunk.count({ where: { courseId } });
-    const withEmbedding = await prisma.ragChunk.count({ where: { courseId, NOT: { embedding: { equals: null } } } });
+    const withEmbedding = await prisma.ragChunk.count({ where: { courseId, embedding: { not: Prisma.DbNull } } });
     return res.json({ courseId, chunks, embedded: chunks > 0 && withEmbedding > 0 });
   } catch (e) {
     return res.status(500).json({ error: e instanceof Error ? e.message : 'internal_error' });

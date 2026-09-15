@@ -10,26 +10,18 @@ import { ThemeProvider } from './app/layout/ThemeProvider';
 import './styles/index.css';
 
 async function registerSW() {
-  if ('serviceWorker' in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.ts');
-      registration.addEventListener('updatefound', () => {
-        const installingWorker = registration.installing;
-        if (installingWorker) {
-          installingWorker.addEventListener('statechange', () => {
-            if (installingWorker.state === 'installed') {
-              if (navigator.onLine) {
-                navigator.serviceWorker.getRegistrations().then((regs) => {
-                  regs.forEach((r) => r.update());
-                });
-              }
-            }
-          });
-        }
-      });
-    } catch (err) {
-      console.error('SW registration failed:', err);
-    }
+  // The service worker is only meaningful on a real origin build. Registering
+  // the raw /sw.ts source errors in dev (wrong MIME type) and inside the nginx
+  // Docker build (Vite does not emit sw.ts there), so be strict about when we
+  // even attempt it: production builds only.
+  if (!import.meta.env.PROD) return;
+  if (!('serviceWorker' in navigator)) return;
+  try {
+    await navigator.serviceWorker.register('/sw.js');
+  } catch (err) {
+    // PWA is progressive enhancement — a failed registration must never break
+    // the app or spam the console (it broke Playwright browser teardown).
+    if (import.meta.env.DEV) console.warn('SW registration skipped:', err);
   }
 }
 

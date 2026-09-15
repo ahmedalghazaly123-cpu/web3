@@ -1,6 +1,7 @@
 // ━━━ AI Studio — grounded course answers, voice fallback, mind maps, notes ━━━
 import type { EntityId } from '../domain';
 import { aiGateway } from './ai-gateway.ts';
+import { courseRetrieval } from '../intelligence/course-retrieval.ts';
 import { knowledgeGraph } from './knowledge-graph.ts';
 import { courses } from '../../data/index.ts';
 
@@ -12,15 +13,34 @@ export const aiStudio = {
     const course = courses.find((c) => String(c.id) === cid || String(c.id) === 'calculus-1');
     const ctx = lessonId ? knowledgeGraph.getContextForLesson(lessonId) : { concepts: [], prerequisites: [], related: [] };
     const conceptList = ctx.concepts.map((c) => c.label).join(', ') || 'course overview';
-    const res = await aiGateway.send({
+
+    // Primary: real RAG backend (grounded answer with citations). The backend
+    // resolves the course by its DB id; map the legacy demo id to the seeded DB
+    // course so real indexing is hit instead of demo text.
+    const DB_COURSE_ALIASES: Record<string, string> = {
+      'calculus-1': 'seed-course-calculus-1',
+    };
+    const dbCourseId = DB_COURSE_ALIASES[String(courseId)] ?? String(courseId);
+    let groundedAnswer: { answer: string; citations: string[] } | null = null;
+    try {
+      const res = await courseRetrieval.askCourse(question, dbCourseId);
+      if (res.grounded && res.answer) {
+        groundedAnswer = { answer: res.answer, citations: res.citations };
+      }
+    } catch { /* fall through to gateway */ }
+
+    const answer = groundedAnswer?.answer ?? (await aiGateway.send({
       prompt: question, mode: 'explain', courseId, lessonId, studentId,
       language: 'en',
-    });
+    })).content;
+
     return {
-      answer: res.content,
-      courseTitle: course?.title ?? String(courseId),
+      answer,
+      courseTitle: course?.title ?? cid,
       concepts: conceptList,
-      sources: [`${course?.title ?? courseId}${lessonId ? ` › ${lessonId}` : ''}`],
+      sources: groundedAnswer
+        ? groundedAnswer.citations.slice(0, 5)
+        : [`${course?.title ?? cid}${lessonId ? ` › ${lessonId}` : ''}`],
       related: ctx.related.map((r) => r.label).slice(0, 5),
     };
   },
@@ -62,7 +82,7 @@ export const aiStudio = {
     for (const w of words) { const k = w.replace(/[^a-z\u0600-\u06ff0-9]/gi, ''); if (k.length > 3) freq.set(k, (freq.get(k) ?? 0) + 1); }
     const keywords = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([k]) => k);
     return {
-      summary: sentences.slice(0, 3).join(lang === 'ar' ? '。 ' : '. '),
+      summary: sentences.slice(0, 3).join('. '),
       keyPoints: sentences.slice(0, 6),
       keywords,
       questions: keywords.slice(0, 3).map((k) => (lang === 'ar' ? `ما المقصود بـ ${k}؟ اشرح باختصار.` : `What is ${k}? Explain briefly.`)),

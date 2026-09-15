@@ -5,7 +5,6 @@ import cors from 'cors';
 import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
-import { PrismaClient } from '@prisma/client';
 import authRoutes from './routes/auth.js';
 import usersRoutes from './routes/users.js';
 import learningRoutes from './routes/learning.js';
@@ -21,6 +20,9 @@ import adminRoutes from './routes/admin.js';
 import ownerRoutes from './routes/owner.js';
 import privacyRoutes from './routes/privacy.js';
 import ragRoutes from './routes/rag.js';
+import voiceRoutes from './routes/voice.js';
+import sandboxRoutes from './routes/sandbox.js';
+import collabRoutes from './routes/collab.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
 import { startRetentionScheduler } from './services/retentionScheduler.js';
@@ -75,6 +77,9 @@ app.use('/api/v1/admin', adminRoutes);
 app.use('/api/v1/owner', ownerRoutes);
 app.use('/api/v1/privacy', privacyRoutes);
 app.use('/api/v1/rag', ragRoutes);
+app.use('/api/v1/voice', voiceRoutes);
+app.use('/api/v1/sandbox', sandboxRoutes);
+app.use('/api/v1/collab', collabRoutes);
 
 app.use(errorHandler);
 

@@ -1,12 +1,17 @@
 const API_BASE = import.meta.env.VITE_API_URL || 'http://localhost:4000/api/v1';
 
-async function request(path: string, options: RequestInit = {}) {
+/** Authorization header for raw `fetch` calls (uploads / audio binaries). */
+function authHeader(): Record<string, string> {
   const token = localStorage.getItem('lp-auth-token');
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+async function request(path: string, options: RequestInit = {}) {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
+    ...authHeader(),
     ...(options.headers as Record<string, string>),
   };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${path}`, { ...options, headers });
   if (!res.ok) {
     const error = await res.json().catch(() => ({ error: 'request-failed' }));
@@ -150,5 +155,71 @@ export const api = {
     updatePreferences: (data: any) => request('/privacy/preferences', { method: 'PUT', body: JSON.stringify(data) }),
     exportData: () => request('/privacy/export'),
     deleteAccount: () => request('/privacy/account', { method: 'DELETE' }),
+  },
+  rag: {
+    ask: (question: string, courseId: string) =>
+      request('/rag/ask', { method: 'POST', body: JSON.stringify({ question, courseId }) }),
+    status: (courseId: string) => request(`/rag/status/${courseId}`),
+  },
+  sandbox: {
+    validate: (data: { language: 'js' | 'python'; code: string; timeoutMs?: number }) =>
+      request('/sandbox/validate', { method: 'POST', body: JSON.stringify(data) }),
+    run: (data: { language: 'js' | 'python'; code: string; timeoutMs?: number; stdin?: string }) =>
+      request('/sandbox/run', { method: 'POST', body: JSON.stringify(data) }),
+    listRuns: (limit?: number) => request(`/sandbox/runs${limit ? `?limit=${limit}` : ''}`),
+    getRun: (id: string) => request(`/sandbox/runs/${id}`),
+  },
+  voice: {
+    createSession: (language: 'en' | 'ar') =>
+      request('/voice/sessions', { method: 'POST', body: JSON.stringify({ language }) }),
+    listSessions: () => request('/voice/sessions'),
+    getSession: (id: string) => request(`/voice/sessions/${id}`),
+    appendTranscript: (id: string, text: string, lang: 'en' | 'ar') =>
+      request(`/voice/sessions/${id}/transcript`, { method: 'POST', body: JSON.stringify({ text, lang }) }),
+    appendAnswer: (id: string, content: string, latencyMs?: number) =>
+      request(`/voice/sessions/${id}/answer`, { method: 'POST', body: JSON.stringify({ content, latencyMs }) }),
+    closeSession: (id: string, summary?: string) =>
+      request(`/voice/sessions/${id}/close`, { method: 'POST', body: JSON.stringify({ summary }) }),
+    summary: (id: string) => request(`/voice/summary/${id}`),
+    /** Server-side STT: multipart upload, returns { text, provider }. */
+    transcribe: (blob: Blob, lang: 'en' | 'ar', filename = 'audio.webm') => {
+      const form = new FormData();
+      form.append('audio', blob, filename);
+      form.append('lang', lang);
+      return fetch(`${API_BASE}/voice/transcribe`, { method: 'POST', headers: authHeader(), body: form }).then(async (res) => {
+        if (!res.ok) throw new Error((await res.json().catch(() => ({} as { error?: string }))).error || `HTTP ${res.status}`);
+        return res.json();
+      });
+    },
+    /** Server-side TTS: returns a playable object URL, or null when unavailable. */
+    synthesize: async (text: string, lang: 'en' | 'ar'): Promise<string | null> => {
+      const res = await fetch(`${API_BASE}/voice/synthesize`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...authHeader() },
+        body: JSON.stringify({ text, lang }),
+      });
+      if (!res.ok) return null;
+      return URL.createObjectURL(await res.blob());
+    },
+  },
+  collab: {
+    createRoom: (data: { kind: string; title: string; courseId?: string; privacy?: string; language?: 'en' | 'ar' }) =>
+      request('/collab/rooms', { method: 'POST', body: JSON.stringify(data) }),
+    listRooms: (params?: { kind?: string; status?: string; limit?: number }) => {
+      const qs = params ? '?' + new URLSearchParams(
+        Object.entries(params).filter(([, v]) => v !== undefined).map(([k, v]) => [k, String(v)]),
+      ).toString() : '';
+      return request(`/collab/rooms${qs}`);
+    },
+    getRoom: (id: string) => request(`/collab/rooms/${id}`),
+    join: (id: string, data: { code?: string; name?: string } = {}) =>
+      request(`/collab/rooms/${id}/join`, { method: 'POST', body: JSON.stringify(data) }),
+    start: (id: string) => request(`/collab/rooms/${id}/start`, { method: 'POST' }),
+    award: (id: string, userId: string, points: number) =>
+      request(`/collab/rooms/${id}/award`, { method: 'POST', body: JSON.stringify({ userId, points }) }),
+    finish: (id: string) => request(`/collab/rooms/${id}/finish`, { method: 'POST' }),
+    listMessages: (id: string) => request(`/collab/rooms/${id}/messages`),
+    postMessage: (id: string, content: string, kind: 'CHAT' | 'SYSTEM' | 'SCORE' = 'CHAT') =>
+      request(`/collab/rooms/${id}/messages`, { method: 'POST', body: JSON.stringify({ content, kind }) }),
   },
 };

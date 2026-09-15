@@ -87,8 +87,6 @@ async function seed() {
         durationMinutes: 30,
         order: 1,
         content: 'The derivative measures the instantaneous rate of change of a function. The power rule states d/dx of x^n equals n times x to the power n minus 1, valid for any real exponent. The derivative of a constant is zero. The sum rule allows differentiating term by term. The product rule combines two functions. The chain rule handles composition of functions. For example, the derivative of x cubed is three x squared, and the derivative of sin x is cos x.',
-
-        content: 'A limit describes the value a function approaches as the input approaches a point.',
       },
     });
 

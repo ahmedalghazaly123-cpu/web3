@@ -32,7 +32,6 @@ export class UserService {
       select: { id: true, email: true, name: true, role: true, locale: true, createdAt: true },
     });
   }
-
   async deleteUser(id: string) {
     await prisma.user.delete({ where: { id } });
   }
@@ -263,3 +262,6 @@ export { assessmentService } from './assessmentService.js';
 export { retentionService } from './retentionService.js';
 export { startRetentionScheduler } from './retentionScheduler.js';
 export { privacyService } from './privacyService.js';
+export { voiceService } from './voiceService.js';
+export { sandboxService } from './sandboxService.js';
+export { collabService } from './collabService.js';
