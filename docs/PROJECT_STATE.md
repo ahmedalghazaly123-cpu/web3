@@ -110,4 +110,5 @@
 - `verify-all.cjs` — الفحص الشامل الواحد: TSC(2) + vitest(2) + live-check + deploy-check + E2E → ملخص `x/y sections passed`.
 - `run-prisma.cjs` — تشغيل أوامر Prisma من الجذر مع تحميل `server/.env`.
 - `grep.cjs` / `print-lines.cjs` / `sleep.cjs` — مساعدات قراءة/انتظار (تتجنب مشاكل quoting في Windows).
+- `commit.cjs` — تنفيذ `git commit` بتمرير argv مباشرة (يتجنب تمزيق علامات التنصيص في cmd.exe).
 - `doc-scripts-check.cjs` — تطابق قائمة السكربتات في هذه الوثيقة مع الواقع على القرص.

@@ -91,11 +91,18 @@ async function j(url, opts) {
     no('AI status', 'could not log in');
   } else {
     try {
-      const r = await j(`${API}/ai/status`, { headers: { Authorization: `Bearer ${token}` } });
-      const o = r.json?.ollama || {};
+      // The Ollama daemon is a local process that may be cold-starting, so a
+      // single failed probe is not conclusive — retry briefly before failing.
+      let status = null;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        status = await j(`${API}/ai/status`, { headers: { Authorization: `Bearer ${token}` } });
+        if (status.json?.ollama?.reachable) break;
+        if (attempt < 3) await new Promise((r) => setTimeout(r, 1500));
+      }
+      const o = status.json?.ollama || {};
       const names = (o.models || []).map((m) => m.name || m).join(',') || '(none)';
       o.reachable ? ok('ollama reachable from server container', `models=${names}`) : no('ollama reachable from server container', `enabled=${o.enabled} reachable=${o.reachable}`);
-      ok('ai chain', `providers=${(r.json?.chain || []).map((c) => c.name).join(' > ')}`);
+      ok('ai chain', `providers=${(status.json?.chain || []).map((c) => c.name).join(' > ')}`);
     } catch (e) {
       no('AI status', e.message);
     }
