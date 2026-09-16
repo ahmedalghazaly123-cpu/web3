@@ -5,8 +5,11 @@
 import { prisma } from '../lib/prisma.js';
 
 const GROQ_KEY = process.env.GROQ_API_KEY;
+// Groq retired `playai-tts` (Mar 2026 deprecation — API returns 400
+// "has been decommissioned"). Default to the current speech model;
+// override with GROQ_TTS_MODEL if Groq renames it again.
 const GROQ_STT_MODEL = process.env.GROQ_STT_MODEL || 'whisper-large-v3-turbo';
-const GROQ_TTS_MODEL = process.env.GROQ_TTS_MODEL || 'playai-tts';
+const GROQ_TTS_MODEL = process.env.GROQ_TTS_MODEL || 'canopylabs-orion-v1';
 const GROQ_TTS_VOICE = process.env.GROQ_TTS_VOICE || 'Fritz-PlayAI';
 
 export type VoiceLang = 'en' | 'ar';

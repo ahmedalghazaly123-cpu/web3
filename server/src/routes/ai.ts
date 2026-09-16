@@ -206,7 +206,7 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
       for (const model of models) {
         try {
           const attempt = `${provider.name}:${model}`;
-          if (provider.name === 'custom' || provider.name === 'groq' || provider.name === 'cerebras' || provider.name === 'openrouter' || provider.name === 'mistral' || provider.name === 'deepinfra' || provider.name === 'huggingface' || provider.name === 'github-models') {
+          if (provider.name === 'custom' || provider.name === 'custom-2' || provider.name === 'groq' || provider.name === 'cerebras' || provider.name === 'openrouter' || provider.name === 'mistral' || provider.name === 'deepinfra' || provider.name === 'huggingface' || provider.name === 'github-models') {
             response = await fetch(`${provider.baseUrl}/chat/completions`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}`, ...(provider.extraHeaders || {}) },
@@ -278,7 +278,7 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
     let content = '';
     let promptTokens: number | undefined;
     let completionTokens: number | undefined;
-    if (usedProvider.name === 'custom' || usedProvider.name === 'groq' || usedProvider.name === 'cerebras' || usedProvider.name === 'openrouter' || usedProvider.name === 'mistral' || usedProvider.name === 'deepinfra' || usedProvider.name === 'huggingface' || usedProvider.name === 'github-models') {
+    if (usedProvider.name === 'custom' || usedProvider.name === 'custom-2' || usedProvider.name === 'groq' || usedProvider.name === 'cerebras' || usedProvider.name === 'openrouter' || usedProvider.name === 'mistral' || usedProvider.name === 'deepinfra' || usedProvider.name === 'huggingface' || usedProvider.name === 'github-models') {
       content = data.choices?.[0]?.message?.content ?? '';
       promptTokens = data.usage?.prompt_tokens;
       completionTokens = data.usage?.completion_tokens;
