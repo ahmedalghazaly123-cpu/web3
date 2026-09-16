@@ -21,6 +21,24 @@ export default defineConfig({
   },
   server: {
     port: 3000,
+    // Dev parity with nginx in production: forward same-origin /api/* to the
+    // backend so fetch('/api/v1/...') and OAuth redirects work on vite dev too.
+    // Without this, visiting /api/v1/auth/google on :3002 serves the SPA
+    // fallback (NotFound page in the screenshot) instead of the API.
+    proxy: {
+      '/api': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/health': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+      '/ready': {
+        target: 'http://localhost:4000',
+        changeOrigin: true,
+      },
+    },
   },
   build: {
     rollupOptions: {
