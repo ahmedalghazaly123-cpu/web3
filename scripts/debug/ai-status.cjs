@@ -21,6 +21,7 @@ const BASE = process.env.LIVE_BASE || 'http://localhost:4000';
   console.log(`chain (${Array.isArray(data.chain) ? data.chain.length : 0} providers):`);
   for (const p of data.chain || []) console.log(`  - ${p.name}: ${(p.models || []).join(', ')}`);
   console.log(`custom: ${JSON.stringify(data.custom)}`);
+  console.log(`custom2: ${JSON.stringify(data.custom2)}`);
   console.log(`ollama: ${JSON.stringify(data.ollama)}`);
   console.log(`fallback: ${data.fallback}`);
 })();
