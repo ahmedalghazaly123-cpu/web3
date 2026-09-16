@@ -28,12 +28,26 @@ const PROVIDER_MODEL_CANDIDATES: Array<{ name: string; baseUrl: string; apiKey: 
 // Example: CUSTOM_LLM_BASE_URL=https://xxxx-8000.proxy.runpod.net/v1
 //          CUSTOM_LLM_MODEL=qwen2.5:32b   (or llama-3.3-70b, allam-2-13b, jais-30b...)
 //          CUSTOM_LLM_API_KEY=any-string-if-no-auth
+// ── 0b) Second self-hosted endpoint — used for the two-space HF plan ──
+// Space-1 (qwen2.5:7b) goes in CUSTOM_LLM_* above (priority #1), Space-2
+// (qwen3:8b) goes here (priority #2). Each Space carries ONE model with its
+// own token gate. If Space-1 sleeps/fails the cascade falls through here.
+// Example: CUSTOM_LLM_2_BASE_URL=https://user2-qwen3-8b.hf.space/v1
+//          CUSTOM_LLM_2_MODEL=qwen3:8b
+//          CUSTOM_LLM_2_API_KEY=<token-for-space-2>
 if (process.env.CUSTOM_LLM_BASE_URL) {
   const customModels = (process.env.CUSTOM_LLM_MODEL || 'qwen2.5:32b')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
   PROVIDER_MODEL_CANDIDATES.push({ name: 'custom', baseUrl: process.env.CUSTOM_LLM_BASE_URL, apiKey: process.env.CUSTOM_LLM_API_KEY || 'local', models: customModels });
+}
+if (process.env.CUSTOM_LLM_2_BASE_URL) {
+  const custom2Models = (process.env.CUSTOM_LLM_2_MODEL || 'qwen3:8b')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  PROVIDER_MODEL_CANDIDATES.push({ name: 'custom-2', baseUrl: process.env.CUSTOM_LLM_2_BASE_URL, apiKey: process.env.CUSTOM_LLM_2_API_KEY || 'local', models: custom2Models });
 }
 if (process.env.GROQ_API_KEY) {
   PROVIDER_MODEL_CANDIDATES.push({ name: 'groq', baseUrl: 'https://api.groq.com/openai/v1', apiKey: process.env.GROQ_API_KEY, models: [process.env.GROQ_MODEL || 'openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] });
@@ -351,25 +365,28 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
 // Lets the frontend (admin panel / AI tutor) show "self-hosted model connected".
 router.get('/status', authMiddleware, async (_req: Request, res: Response) => {
   const customUrl = process.env.CUSTOM_LLM_BASE_URL || '';
-  let customOk = false;
-  let customModels: string[] = [];
-  if (customUrl) {
+  const custom2Url = process.env.CUSTOM_LLM_2_BASE_URL || '';
+  async function probeOpenAI(base: string, token: string): Promise<{ ok: boolean; models: string[] }> {
+    if (!base) return { ok: false, models: [] };
     try {
       const ctrl = new AbortController();
       const t = setTimeout(() => ctrl.abort(), 8000);
-      const r = await fetch(`${customUrl.replace(/\/$/, '')}/models`, {
-        headers: { Authorization: `Bearer ${process.env.CUSTOM_LLM_API_KEY || 'local'}` },
+      const r = await fetch(`${base.replace(/\/$/, '')}/models`, {
+        headers: { Authorization: `Bearer ${token}` },
         signal: ctrl.signal,
       });
       clearTimeout(t);
       if (r.ok) {
         const j: any = await r.json().catch(() => null);
         const list = j?.data ?? j?.models ?? [];
-        if (Array.isArray(list)) customModels = list.map((m: any) => m.id ?? m.name).filter(Boolean);
-        customOk = true;
+        if (Array.isArray(list)) return { ok: true, models: list.map((m: any) => m.id ?? m.name).filter(Boolean) };
+        return { ok: true, models: [] };
       }
-    } catch { customOk = false; }
+    } catch { /* unreachable */ }
+    return { ok: false, models: [] };
   }
+  const custom = await probeOpenAI(customUrl, process.env.CUSTOM_LLM_API_KEY || 'local');
+  const custom2 = await probeOpenAI(custom2Url, process.env.CUSTOM_LLM_2_API_KEY || 'local');
   let ollamaOk = false;
   let ollamaModels: string[] = [];
   if (process.env.OLLAMA_ENABLED !== 'false') {
@@ -389,7 +406,8 @@ router.get('/status', authMiddleware, async (_req: Request, res: Response) => {
   res.json({
     ok: true,
     chain: PROVIDER_MODEL_CANDIDATES.map((p) => ({ name: p.name, models: p.models })),
-    custom: { configured: !!customUrl, reachable: customOk, models: customModels, baseUrl: customUrl },
+    custom: { configured: !!customUrl, reachable: custom.ok, models: custom.models, baseUrl: customUrl },
+    custom2: { configured: !!custom2Url, reachable: custom2.ok, models: custom2.models, baseUrl: custom2Url },
     ollama: { enabled: process.env.OLLAMA_ENABLED !== 'false', reachable: ollamaOk, models: ollamaModels },
     fallback: 'local-demo',
   });

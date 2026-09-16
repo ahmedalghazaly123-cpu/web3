@@ -38,8 +38,11 @@ services:
       SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production-use-a-long-random-string}
       COOKIE_SECRET: ${COOKIE_SECRET:-change-me-in-production-use-another-long-random-string}
       AUTH_RATE_LIMIT_MAX: 200
-      # The Ollama daemon runs on the host, not inside this container.
-      OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # The Ollama daemon can run on the host (dev) or on a remote free VPS
+      # (Oracle Always Free + Tailscale). Overridable from server/.env.
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:3b}
+      OLLAMA_ENABLED: ${OLLAMA_ENABLED:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

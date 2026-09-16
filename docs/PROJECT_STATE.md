@@ -124,6 +124,8 @@
 - `bundle-scan.cjs` / `bundle-api-check.cjs` — فحص الباندل المخدوم (API base + تسريبات).
 - `ai-status.cjs` / `rag-e2e.cjs` / `rag-scout.cjs` / `tts-check.cjs` — فحوص AI/RAG/الصوت.
 - `check-playwright.cjs` / `schema-models.cjs` / `ollama-serve.cjs` / `ollama-pull.cjs` — فحوص بيئة/مخطط/تحميل الموديل.
+- `remote-llm-check.cjs` — فحص endpoint ذاتي الاستضافة بعيد (Space/VPS) قبل توصيله: native `/api/tags` + ‏OpenAI‏ `/v1/models` + توليد حقيقي في المسارين + تحذير العنوان العام بدون توكن (`--token=`/`--quick`).
+- `resources-check.cjs` — موارد الجهاز (RAM الكلية/الفارغة + الديسك الفارغ) — تُستخدم قبل قرارات تحميل الموديلات محليا.
 - `print-lines.cjs` — مساعد قراءة نطاق أسطر من ملف/لوج (يتجنب مشاكل quoting في Windows).
 - `db-check.cjs` — فحص حي للداتابيز (عدّادات أساسية).
 - `prisma-validate.cjs` / `prisma-diff.cjs` — فحص المخطط والـ shadow diff.
