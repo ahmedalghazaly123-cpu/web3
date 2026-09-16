@@ -4,11 +4,16 @@
 const fs = require('fs');
 const path = require('path');
 
-const [key, value] = process.argv.slice(2);
-if (!key || value === undefined) {
+const [rawKey, rawValue] = process.argv.slice(2);
+if (!rawKey || rawValue === undefined) {
   console.error('usage: node scripts/debug/putenv.cjs <KEY> <VALUE> [envFile]');
   process.exit(1);
 }
+// cmd.exe / PowerShell keep the wrapping quotes when a value contains commas,
+// so `OPENROUTER_MODEL="a,b"` would otherwise land in .env with literal quotes.
+// Strip one layer of wrapping quotes so the written value is always clean.
+const key = rawKey;
+const value = rawValue.replace(/^"(.*)"$/s, '$1').replace(/^'(.*)'$/s, '$1');
 const envFile = process.argv[4]
   ? path.resolve(process.argv[4])
   : path.join(__dirname, '..', '..', 'server', '.env');

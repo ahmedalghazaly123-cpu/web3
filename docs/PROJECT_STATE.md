@@ -112,6 +112,45 @@
 - **إصلاح هشاشة حقيقي في اختبارات السيرفر**: `server/vitest.config.ts` كان يستخدم مهلة vitest الافتراضية (5s). الاختبارات في `server/tests/` هي **اختبارات تكامل** تضرب سيرفرا حيا (`localhost:4000`) + PostgreSQL حقيقي، فكان `retention.test.ts` يفشل بـ `Test timed out in 5000ms` عند تشغيل `tsc`/`vitest` للفرونت بالتوازي على نفس الجهاز (تنافس موارد، لا خطأ منطقي). الحل: `testTimeout: 30000` + `hookTimeout: 30000` في `server/vitest.config.ts`. النتيجة بعد الإصلاح: **60/60** في ~29s حتى تحت الحمل.
 - **قاعدة تشغيل على هذا الجهاز:** شغّل الفحوص الثقيلة **متتابعة** لا متوازية إن ظهرت فشل غير منطقي (مثال: E2E يحتاج `--workers=1`، والاختبارات الزمنية محتاجة مهل أوسع).
 
+### أُنجز بالكامل 2026-09-16 (المفاتيح + المزودون + فحص الدخول وحفظ الداتا)
+
+#### أ) كل مفاتيح المزودين محقونة ومتحقق منها حيّا — **8/8 خضراء**
+`node scripts/debug/verify-providers.cjs` → كل مزود رجع `200` (فحص HTTP status فقط، بدون طباعة أي مفتاح):
+`groq` ✅ · `openrouter` ✅ · `cerebras` ✅ · `mistral` ✅ · `deepinfra` ✅ · `huggingface` ✅ · `github-models` ✅ · `google` ✅
+
+- المفاتيح تُكتب في `server/.env` عبر `node scripts/debug/putenv-silent.cjs <file.json>` — **بدون طباعة القيم** (أسماء + أطوال فقط)، وحالة البيئة تُعرض بـ `env-status.cjs` بدون كشف أي قيمة.
+- ⚠️ **تنبيه أمني مفتوح:** المفاتيح التي لُصقت في نص المحادثة يجب تدويرها (revoke + إصدار جديد) من لوحة كل مزود. `.env` غير متتبعة في Git، فلا يوجد تسريب في تاريخ الريبو.
+
+#### ب) إصلاح سلوكي حقيقي في السلسلة (بج صامت)
+خانة `custom-2` كانت **تُسجَّل** في `PROVIDER_MODEL_CANDIDATES` وتظهر في `/status`، لكن كتلة التوليد (وقت الطلب) كانت تفحص `provider.name === 'custom'` فقط — أي أنها كانت تُعلن نفسها جاهزة وتفشل عند الاستخدام الفعلي. أُصلح الشرط ليشمل `custom-2` في **موضعَي** الطلب (التوليد + الرد). هذا يمنع ظهورًا كاذبًا لخانة غير عاملة.
+
+#### ج) قائمة OpenRouter المجانية مثبّتة على موديلات **ترد فعلا**
+`OPENROUTER_MODEL=nvidia/nemotron-3-super-120b-a12b:free, nvidia/nemotron-3-ultra-550b-a55b:free, z-ai/glm-5.2:free, liquid/lfm-2.5-2.6b:free, cohere/north-mini-code:free`
+- استُخرجت بـ `openrouter-models.cjs --list` (موديلات بسعر صفر/`:free`) ثم فُحصت بـ `--probe` ثم قُيّمت بـ `or-eval.cjs` (برومبت tutor حقيقي) و`or-arabic.cjs` (فحص عربي).
+- بعض موديلات `:free` ترجع `429` من المزود (حد كوتا عندهم) أو `403` (متاحة في وضع agentic فقط) — لذلك أُزيلت من القائمة الافتراضية، والـ cascade عند الفشل ينتقل للموديل التالي تلقائيا. القائمة قابلة للتغيير من `.env` **بدون لمس الكود**.
+
+#### د) إصلاح TTS ميت
+`playai-tts` أُوقف من Groq (‏400 decommissioned). الافتراضي أصبح `GROQ_TTS_MODEL=canopylabs-orion-v1` في `voiceService.ts` و`.env.example` و`.env`.
+
+#### هـ) مسار تسجيل الدخول — أين يوجّه وأين تُحفظ الداتا (فحص حي **12/12**)
+`node scripts/debug/auth-live-check.cjs` → **12 passed, 0 failed**:
+`signup 201 + token` · `role=STUDENT يُحفظ` · `GET /me يقرأ الجلسة` · `إيميل مكرر → 409` · `كلمة مرور ضعيفة → 400` · `login → 200 + token` · `كلمة مرور غلط → 401` · `GET /me بدون توكن → 401` · `logout ناجح` · `التوكن يموت بعد الخروج → 401` · `Google OAuth يعمل → 302 إلى accounts.google.com` · `redirect_uri راجع على الـ API`.
+
+**أين توجّه صفحة الدخول بعد النجاح** (`src/features/auth/pages/RoleLogin.tsx` → `ROLE_HOME` في `src/shared/lib/mockAuth.ts`):
+
+| الدور | بعد تسجيل الدخول |
+|---|---|
+| `student` | `/dashboard` |
+| `teacher` | `/teacher` |
+| `admin` | `/admin` |
+| `owner` | `/owner` |
+
+**أين تُحفظ الداتا:**
+- **التوكن (العميل):** `localStorage['lp-auth-token']` — يُزيله الخروج، وعند البداية يُستعاد الجلسة عبر `GET /api/v1/auth/me` (`src/app/layout/AuthProvider.tsx`). لا يوجد حفظ لكلمة المرور إطلاقا.
+- **السيرفر (PostgreSQL، حاوية `learnpilot-postgres`):** جدول `users` (الدور محفوظ كـ enum `STUDENT/TEACHER/ADMIN/OWNER`، وكلمة المرور **مُجزّأة** لا نص صريح) + جدول `sessions` (الجلسات، تُبطَل عند الخروج) + جدول `audit_logs` (سجل أحداث الأمن).
+- **الحالة الفعلية الحيّة:** `178 users` · `380 sessions` · `664 audit_logs` — والداتا **داخل حاوية Docker** (volume) لا في ملفات متفرقة.
+- **تسجيل الدخول الاجتماعي:** Google OAuth يبدأ من `/api/v1/auth/google` ويعود إلى `/api/v1/auth/google/callback` ثم إلى الواجهة.
+
 ## سكربتات مساعدة (scripts/debug/)
 - `deploy-check.cjs` — فحص النشر الشامل (SPA + deep-link + nginx proxy + bundle + ollama + AI chain + courses).
 - `docker-status.cjs` — الحاويات/الصور/المنافذ + فحوص HTTP + الداتابيز من داخل السيرفر + موديلات Ollama.
@@ -124,6 +163,10 @@
 - `bundle-scan.cjs` / `bundle-api-check.cjs` — فحص الباندل المخدوم (API base + تسريبات).
 - `ai-status.cjs` / `rag-e2e.cjs` / `rag-scout.cjs` / `tts-check.cjs` — فحوص AI/RAG/الصوت.
 - `check-playwright.cjs` / `schema-models.cjs` / `ollama-serve.cjs` / `ollama-pull.cjs` — فحوص بيئة/مخطط/تحميل الموديل.
+- `env-status.cjs` / `verify-providers.cjs` / `putenv-silent.cjs` — حالة مفاتيح `.env` + فحص المزودين الثمانية + حقن آمن بدون طباعة قيم.
+- `groq-models.cjs` / `openrouter-models.cjs` / `or-eval.cjs` / `or-arabic.cjs` — سرد موديلات `:free` + فحصها + تقييمها ببرومبت حقيقي (عربي/إنجليزي).
+- `auth-live-check.cjs` / `check-users.sql` — فحص الدخول الحي (12 فحصا) + عدّ صفوف `users/sessions/audit_logs`.
+- `lint-all.cjs` — فحص `oxlint` لكل من `server/src` و`src` و`scripts`.
 - `remote-llm-check.cjs` — فحص endpoint ذاتي الاستضافة بعيد (Space/VPS) قبل توصيله: native `/api/tags` + ‏OpenAI‏ `/v1/models` + توليد حقيقي في المسارين + تحذير العنوان العام بدون توكن (`--token=`/`--quick`).
 - `resources-check.cjs` — موارد الجهاز (RAM الكلية/الفارغة + الديسك الفارغ) — تُستخدم قبل قرارات تحميل الموديلات محليا.
 - `print-lines.cjs` — مساعد قراءة نطاق أسطر من ملف/لوج (يتجنب مشاكل quoting في Windows).
@@ -142,3 +185,9 @@
 - `putenv-silent.cjs` — كتابة أسرار من ملف JSON **بدون طباعة القيم** (أسماء + أطوال فقط) — للصق المفاتيح بأمان.
 - `env-status.cjs` — عرض حالة المفاتيح (SET بطولها / EMPTY) **بدون طباعة أي قيمة**.
 - `verify-providers.cjs` — فحص كل مفتاح مزود (HTTP status فقط، بدون طباعة مفاتيح أو محتوى).
+- `auth-live-check.cjs` — فحص حي لمسار الدخول: signup → token → `/me` → login → logout + الحُرّاس (إيميل مكرر 409، كلمة مرور ضعيفة 400، كلمة مرور غلط 401، توكن ميت بعد الخروج) + التحقق أن Google OAuth مضبوط فعلًا (`302` إلى `accounts.google.com` و`redirect_uri` راجع على الـ API).
+- `groq-models.cjs` — يسرد موديلات Groq الحقيقية للـ TTS/STT/chat (`tts|stt|chat|all`) لاختيار معرّفات صحيحة بدل التخمين بعد أي deprecation.
+- `openrouter-models.cjs` — يستكشف موديلات OpenRouter المجانية فعلًا (`:free`/سعر صفر) ويفحصها بطلب قصير (`--list`/`--probe`) لتثبيت قائمة `OPENROUTER_MODEL` على موديلات ترد حقًا.
+- `or-eval.cjs` — تقييم موديلات OpenRouter المجانية ببرومبت tutor حقيقي (يكشف الردود الفارغة أو تسريب الـ reasoning قبل تثبيت أي موديل).
+- `or-arabic.cjs` — فحص القدرة العربية لموديلات OpenRouter المجانية (المشروع ثنائي اللغة، فالموديل الافتراضي لازم يرد عربيًا نظيفًا).
+- `lint-all.cjs` — تشغيل oxlint المحلي على `server/src` و`src` و`scripts` (تجاوز بطء `npx` على هذا الجهاز).

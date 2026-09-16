@@ -5,12 +5,18 @@
 import { prisma } from '../lib/prisma.js';
 
 const GROQ_KEY = process.env.GROQ_API_KEY;
-// Groq retired `playai-tts` (Mar 2026 deprecation — API returns 400
-// "has been decommissioned"). Default to the current speech model;
-// override with GROQ_TTS_MODEL if Groq renames it again.
+// Groq retired `playai-tts` (Mar 2026 — 400 "has been decommissioned") and its
+// replacement is language-specific: Orpheus English / Orpheus Arabic (Saudi).
+// Both also need a ONE-TIME terms acceptance in the Groq console, otherwise the
+// API answers 400 "requires terms acceptance". Override the ids/voices below if
+// Groq renames them again.
 const GROQ_STT_MODEL = process.env.GROQ_STT_MODEL || 'whisper-large-v3-turbo';
-const GROQ_TTS_MODEL = process.env.GROQ_TTS_MODEL || 'canopylabs-orion-v1';
-const GROQ_TTS_VOICE = process.env.GROQ_TTS_VOICE || 'Fritz-PlayAI';
+const GROQ_TTS_MODEL_EN = process.env.GROQ_TTS_MODEL || 'canopylabs/orpheus-v1-english';
+const GROQ_TTS_MODEL_AR = process.env.GROQ_TTS_MODEL_AR || 'canopylabs/orpheus-arabic-saudi';
+const GROQ_TTS_VOICE_EN = process.env.GROQ_TTS_VOICE || 'hannah';
+const GROQ_TTS_VOICE_AR = process.env.GROQ_TTS_VOICE_AR || 'layla';
+/** Console page where the one-time model terms acceptance happens. */
+const GROQ_TTS_TERMS_URL = 'https://console.groq.com/playground?model=';
 
 export type VoiceLang = 'en' | 'ar';
 
@@ -44,16 +50,15 @@ export async function transcribeAudio(audio: Buffer, filename: string, mime: str
 
 export async function synthesizeSpeech(text: string, lang: VoiceLang): Promise<{ audio: Buffer; mime: string; provider: string } | null> {
   if (!GROQ_KEY) return null;
-  // PlayAI voices are mostly English; an Arabic voice can be configured with
-  // GROQ_TTS_VOICE_AR. When no Arabic voice is set, the client falls back to the
-  // browser speech synthesis for `ar`.
-  const voice = lang === 'ar' ? (process.env.GROQ_TTS_VOICE_AR || GROQ_TTS_VOICE) : GROQ_TTS_VOICE;
+  // Each Orpheus model carries its own voice set, so pick model + voice together.
+  const model = lang === 'ar' ? GROQ_TTS_MODEL_AR : GROQ_TTS_MODEL_EN;
+  const voice = lang === 'ar' ? GROQ_TTS_VOICE_AR : GROQ_TTS_VOICE_EN;
   try {
     const res = await fetch('https://api.groq.com/openai/v1/audio/speech', {
       method: 'POST',
       headers: { Authorization: `Bearer ${GROQ_KEY}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: GROQ_TTS_MODEL,
+        model,
         input: text.slice(0, 2000),
         voice,
         response_format: 'wav',
@@ -61,12 +66,22 @@ export async function synthesizeSpeech(text: string, lang: VoiceLang): Promise<{
       signal: AbortSignal.timeout(60_000),
     });
     if (!res.ok) {
-      console.warn(`[voice] tts ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const detail = (await res.text()).slice(0, 300);
+      // The most common cause is a pending one-time terms acceptance — point the
+      // operator at the console page instead of leaving a cryptic 400 in the log.
+      if (res.status === 400 && /terms acceptance/i.test(detail)) {
+        console.warn(
+          `[voice] tts ${res.status}: ${detail}\n` +
+            `[voice] action required: accept the model terms once at ${GROQ_TTS_TERMS_URL}${encodeURIComponent(model)}`,
+        );
+      } else {
+        console.warn(`[voice] tts ${res.status}: ${detail}`);
+      }
       return null;
     }
     const buf = Buffer.from(await res.arrayBuffer());
     if (!buf.length) return null;
-    return { audio: buf, mime: 'audio/wav', provider: 'groq-tts' };
+    return { audio: buf, mime: 'audio/wav', provider: `groq-tts:${model}` };
   } catch (e) {
     console.warn('[voice] tts failed:', e instanceof Error ? e.message : e);
     return null;

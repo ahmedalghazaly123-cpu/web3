@@ -56,8 +56,21 @@ if (process.env.GROQ_API_KEY) {
 // The cascade tries them in order: 404/402/429 on one auto-falls to the next
 // on the SAME provider before moving on. Add/remove :free models here.
 // Discover current free models: GET https://openrouter.ai/api/v1/models
+// Curation notes (measured by scripts/debug/or-probe.cjs, or-eval.cjs, or-arabic.cjs):
+//   ok   nex-agi/nex-n2.5-mini:free            clean EN + clean AR (~1.4s) — bilingual best
+//   ok   nvidia/nemotron-3-super-120b-a12b:free clean EN, 120B (~0.9s)
+//   ok   nvidia/nemotron-3-ultra-550b-a55b:free clean EN, 550B (~1.6s)
+//   ok   z-ai/glm-5.2:free                     clean EN (~1.4s)
+//   ok   liquid/lfm-2.5-2.6b:free              fastest (~0.8s), clean EN
+//   ok   cohere/north-mini-code:free           clean EN, code-oriented
+//   out  google/gemma-4-*-it:free              permanent 429 on the free tier
+//   out  thinkingmachines/inkling*:free        403 (agentic-only, not usable here)
+// Notes: reasoning traces arrive in a SEPARATE `reasoning` field (never in
+// `content`) for the nemotron/glm models, so they are safe as user-facing answers.
+// Several of these 429 transiently under load — that is exactly why the list is
+// long: the cascade falls through to the next model on the SAME key.
 if (process.env.OPENROUTER_API_KEY) {
-  const openrouterModels = (process.env.OPENROUTER_MODEL || 'liquid/lfm-2.5-2.6b:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3.5-lightning:free,cohere/north-mini-code:free,nvidia/nemotron-3-ultra-550b-a55b:free')
+  const openrouterModels = (process.env.OPENROUTER_MODEL || 'nex-agi/nex-n2.5-mini:free,nvidia/nemotron-3-super-120b-a12b:free,nvidia/nemotron-3-ultra-550b-a55b:free,z-ai/glm-5.2:free,liquid/lfm-2.5-2.6b:free,cohere/north-mini-code:free')
     .split(',')
     .map((s) => s.trim())
     .filter(Boolean);
@@ -86,9 +99,52 @@ if (process.env.GOOGLE_AI_API_KEY) {
 if (process.env.OLLAMA_ENABLED !== 'false') {
   PROVIDER_MODEL_CANDIDATES.push({ name: 'ollama', baseUrl: process.env.OLLAMA_BASE_URL || 'http://localhost:11434', apiKey: 'local', models: [process.env.OLLAMA_MODEL || 'llama3'] });
 }
+// A provider's default list can accidentally repeat the model named in .env
+// (e.g. HUGGINGFACE_MODEL=Qwen/Qwen2.5-7B-Instruct also appears in the defaults).
+// Dedupe so the cascade never burns a round-trip retrying the same model.
+for (const p of PROVIDER_MODEL_CANDIDATES) {
+  p.models = [...new Set(p.models)];
+}
 const PROVIDERS = PROVIDER_MODEL_CANDIDATES.map((p) => ({ name: p.name, baseUrl: p.baseUrl, apiKey: p.apiKey, model: p.models[0], extraHeaders: p.extraHeaders }));
 function candidateFor(providerName: string): { name: string; baseUrl: string; apiKey: string; models: string[]; extraHeaders?: Record<string, string> } | undefined {
   return PROVIDER_MODEL_CANDIDATES.find((p) => p.name === providerName);
+}
+
+// Some free models dump their chain-of-thought into the answer body, so the
+// student would read "Here's a thinking process: ..." instead of a lesson.
+// A hard system instruction keeps replies tutor-shaped (verified against real
+// models via scripts/debug/or-eval.cjs --sys).
+const FINAL_ANSWER_ONLY =
+  'Respond with the final answer only. Never include your reasoning, analysis, planning steps, or thinking process.';
+
+// Pull the assistant text out of any provider shape. Used both while probing
+// candidates (a 200 with no usable text must fall through to the next model)
+// and after the winner is picked.
+function extractContent(
+  providerName: string,
+  data: any
+): { content: string; promptTokens?: number; completionTokens?: number } {
+  if (providerName === 'google') {
+    const meta = data?.usageMetadata;
+    const parts = data?.candidates?.[0]?.content?.parts;
+    return {
+      content: String(Array.isArray(parts) ? parts.map((p: any) => p?.text ?? '').join('') : '').trim(),
+      promptTokens: meta?.promptTokenCount,
+      completionTokens: meta?.candidatesTokenCount,
+    };
+  }
+  if (providerName === 'ollama') {
+    return {
+      content: String(data?.message?.content ?? '').trim(),
+      promptTokens: data?.prompt_eval_count,
+      completionTokens: data?.eval_count,
+    };
+  }
+  return {
+    content: String(data?.choices?.[0]?.message?.content ?? '').trim(),
+    promptTokens: data?.usage?.prompt_tokens,
+    completionTokens: data?.usage?.completion_tokens,
+  };
 }
 
 // In-memory response cache: identical requests are served from here so the
@@ -220,7 +276,10 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
               headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${provider.apiKey}`, ...(provider.extraHeaders || {}) },
               body: JSON.stringify({
                 model,
-                messages: [{ role: 'user', content: prompt }],
+                messages: [
+                  { role: 'system', content: FINAL_ANSWER_ONLY },
+                  { role: 'user', content: prompt },
+                ],
                 max_tokens: 2000,
                 temperature: 0.7,
               }),
@@ -232,7 +291,10 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+                body: JSON.stringify({
+                  systemInstruction: { parts: [{ text: FINAL_ANSWER_ONLY }] },
+                  contents: [{ parts: [{ text: prompt }] }],
+                }),
                 signal: controller.signal,
               }
             );
@@ -242,15 +304,30 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 model,
-                messages: [{ role: 'user', content: prompt }],
+                messages: [
+                  { role: 'system', content: FINAL_ANSWER_ONLY },
+                  { role: 'user', content: prompt },
+                ],
                 stream: false,
               }),
               signal: controller.signal,
             });
           }
           if (response && response.ok) {
-            usedProvider = { ...provider, model };
-            break;
+            // A 200 with no usable text (reasoning-only or empty completion) is
+            // useless to the student: fall through to the next model instead of
+            // returning a blank lesson.
+            const peek: any = await response
+              .clone()
+              .json()
+              .catch(() => null);
+            if (extractContent(provider.name, peek).content) {
+              usedProvider = { ...provider, model };
+              break;
+            }
+            failedAttempts.push(`${attempt}->empty`);
+            response = null;
+            continue;
           }
           failedAttempts.push(`${attempt}->http${response?.status ?? 'noresp'}`);
           response = null;
@@ -283,22 +360,26 @@ router.post('/generate', authMiddleware, async (req: Request, res: Response) => 
     }
 
     const data: any = await response.json();
-    let content = '';
-    let promptTokens: number | undefined;
-    let completionTokens: number | undefined;
-    if (usedProvider.name === 'custom' || usedProvider.name === 'custom-2' || usedProvider.name === 'groq' || usedProvider.name === 'cerebras' || usedProvider.name === 'openrouter' || usedProvider.name === 'mistral' || usedProvider.name === 'deepinfra' || usedProvider.name === 'huggingface' || usedProvider.name === 'github-models') {
-      content = data.choices?.[0]?.message?.content ?? '';
-      promptTokens = data.usage?.prompt_tokens;
-      completionTokens = data.usage?.completion_tokens;
-    } else if (usedProvider.name === 'google') {
-      content = data.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
-      const meta = data.usageMetadata;
-      promptTokens = meta?.promptTokenCount;
-      completionTokens = meta?.candidatesTokenCount;
-    } else if (usedProvider.name === 'ollama') {
-      content = data.message?.content ?? '';
-      promptTokens = data.prompt_eval_count;
-      completionTokens = data.eval_count;
+    const extracted = extractContent(usedProvider.name, data);
+    const content = extracted.content;
+    const promptTokens = extracted.promptTokens;
+    const completionTokens = extracted.completionTokens;
+
+    // Last-resort guard: if the winning provider somehow returned no text, serve
+    // the offline lesson instead of an empty bubble.
+    if (!content) {
+      console.warn('[ai] winning provider returned empty content:', usedProvider.name);
+      return res.json({
+        ok: true,
+        content: getDemo(mode, language),
+        model: 'local-demo',
+        provider: 'local-demo',
+        costUsd: 0,
+        latencyMs: 50,
+        usedCache: false,
+        safetyPassed: true,
+        error: 'empty-content',
+      });
     }
 
     // Persist a usage/cost record so /ai/usage reflects real provider spend.
