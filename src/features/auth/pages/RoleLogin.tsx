@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -103,8 +103,17 @@ export function RoleLoginBody(p: { role: UserRole }) {
   const [resetErr, setResetErr] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const rtl = i18n.dir() === 'rtl';
-  const { login, signup } = useAuth();
-  const goHome = () => navigate(ROLE_HOME[role], { replace: true });
+  const { login, signup, authenticated, role: sessionRole } = useAuth();
+  const goHome = () => {
+    // Backend is authoritative: navigate by the *session* role.
+    // The old code used the page prop (ROLE_HOME[role]) which bounced
+    // back to /account-type whenever the stored session role mismatched.
+    navigate(ROLE_HOME[sessionRole] ?? ROLE_HOME[role], { replace: true });
+  };
+  useEffect(() => {
+    if (authenticated && sessionRole) goHome();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authenticated, sessionRole]);
   const quickSignIn = () => {
     setFormErr('');
     if (!email || !password) {

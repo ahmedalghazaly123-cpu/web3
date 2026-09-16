@@ -166,6 +166,7 @@
 - `env-status.cjs` / `verify-providers.cjs` / `putenv-silent.cjs` — حالة مفاتيح `.env` + فحص المزودين الثمانية + حقن آمن بدون طباعة قيم.
 - `groq-models.cjs` / `openrouter-models.cjs` / `or-eval.cjs` / `or-arabic.cjs` — سرد موديلات `:free` + فحصها + تقييمها ببرومبت حقيقي (عربي/إنجليزي).
 - `auth-live-check.cjs` / `check-users.sql` — فحص الدخول الحي (12 فحصا) + عدّ صفوف `users/sessions/audit_logs`.
+- `run-npm.cjs` / `build-local.cjs` — حقن npm منفصل + بناء SPA محلي في الخلفية (للبيئات التي يعلق فيها build context الخاص بـ Docker مثل OneDrive).
 - `lint-all.cjs` — فحص `oxlint` لكل من `server/src` و`src` و`scripts`.
 - `remote-llm-check.cjs` — فحص endpoint ذاتي الاستضافة بعيد (Space/VPS) قبل توصيله: native `/api/tags` + ‏OpenAI‏ `/v1/models` + توليد حقيقي في المسارين + تحذير العنوان العام بدون توكن (`--token=`/`--quick`).
 - `resources-check.cjs` — موارد الجهاز (RAM الكلية/الفارغة + الديسك الفارغ) — تُستخدم قبل قرارات تحميل الموديلات محليا.
