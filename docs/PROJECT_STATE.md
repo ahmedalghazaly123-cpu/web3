@@ -48,7 +48,7 @@
 | `tsc --noEmit` (فرونت) | ✅ صفر أخطاء |
 | `tsc --noEmit` (سيرفر) | ✅ صفر أخطاء |
 | `vitest` (فرونت) | ✅ 139/139 |
-| `vitest` (سيرفر، ضد سيرفر حي + DB حي) | ✅ 36/36 (auth, RBAC, privacy, retention, validation, learning) |
+| `vitest` (سيرفر، ضد سيرفر حي + DB حي) | ✅ 60/60 (auth, rbac, security, retention, validation, learning, sandbox, voice) |
 | `GET /health` | ✅ يعمل |
 | `GET /api/v1/ai/status` | ✅ يستجيب (يتطلب auth — طبيعي) |
 
@@ -68,7 +68,7 @@
 - **إصلاح خطأ تصريف**: `server/src/services/index.ts` كان فيه `export` داخل جسم كلاس `UserService` (خطأ نحوي) — أُزيل.
 - **الترحيل الناقص** `20260915000000_add_voice_sandbox_room_messages`: جداول `voice_sessions`, `voice_messages`, `sandbox_runs`, `room_messages` + الـ enums الخاصة بها كانت في المخطط بلا migration (drift يسبب `relation does not exist` وقت التشغيل).
 - **الفرونت**: مجموعات `sandbox`/`voice`/`collab` في `src/shared/services/api.ts`، ومحوّلا `shared/services/sandbox.ts` و`shared/services/voice.ts` (على نمط `learningSync`: الباك إند مرجعي مع بديل محلي/متصفح)، وربط صفحات Hub: Code Lab حقيقي في `Studio.tsx`، وجلسات + STT/TTS من السيرفر مع بديل المتصفح في `Voice.tsx`، وغرف باحتساب سيرفر مع بديل محلي في `Compete.tsx`، مع ترجمات عربي/إنجليزي كاملة، وتحديث `production.ts` (`securityAudit`) ليطابق الواقع.
-- **التحقق الحي**: `tsc --noEmit` للسيرفر ✅ (صفر أخطاء)، `tsc -b` للفرونت ✅، فرونت `vitest` 139/139 ✅، سيرفر `vitest` الجديد (`tests/sandbox.test.ts` 13 اختبار + `tests/voice.test.ts` 5 اختبارات) 18/18 ✅، و`oxlint` 0 أخطاء.
+- **التحقق الحي**: `tsc --noEmit` للسيرفر ✅ (صفر أخطاء)، `tsc -b` للفرونت ✅، فرونت `vitest` 139/139 ✅، وسيرفر `vitest` كامل **60/60** عبر 8 ملفات (`auth`, `rbac`, `security`, `retention`, `validation`, `learning`, `sandbox`, `voice`) ✅، و`oxlint` 0 أخطاء.
 
 ### 7) سكربتات فحص مساعدة جديدة (`scripts/debug/`)
 - `run-tsc.cjs` — فحص الأنواع للفرونت/السيرفر في الخلفية مع لوج قابل للمتابعة (يتجنب مهلة الأوامر).
@@ -86,6 +86,11 @@
 - **E2E بمتصفح حقيقي**: `node scripts/debug/run-e2e.cjs tests/e2e --reporter=line --workers=1` → **13/13** ✅ (auth: تسجيل/دخول/دخول admin/خروج/روابط، learning-persistence: 3 اختبارات، navigation: 2، roles: 3).
   - ملاحظة: التشغيل بـ `--workers=1` ضروري على هذا الجهاز؛ التوازي (2 workers) يسبب فشل في `roles` بسبب تنافس على الموارد لا بسبب الكود — كل اختبار ينجح منفردا.
 - **إثبات Ollama كـ fallback من داخل الحاوية**: `scripts/debug/ollama-fallback-proof.cjs` يُنسخ للحاوية ويُشغّل، والنتيجة: `reachable from container: yes (http 200)` + إكمال حقيقي `qwen2.5:3b` (`content: fallback-ok`, 6.4s). هذا يثبت مسار الـ cascade (`OLLAMA_BASE_URL=http://host.docker.internal:11434` + `POST /api/chat`).
+
+### أُنجز بالكامل 2026-09-16 (التحقق الشامل النهائي + إصلاح هشاشة)
+- **كل الفحوص خضراء:** `tsc` سيرفر/فرونت = 0 أخطاء؛ `vitest` فرونت = **139/139**؛ `vitest` سيرفر = **60/60**؛ `live-check.cjs` (API حي) = **34/34**؛ `deploy-check.cjs` (نشر) = **7/7**؛ `E2E` = **13/13**.
+- **إصلاح هشاشة حقيقي في اختبارات السيرفر**: `server/vitest.config.ts` كان يستخدم مهلة vitest الافتراضية (5s). الاختبارات في `server/tests/` هي **اختبارات تكامل** تضرب سيرفرا حيا (`localhost:4000`) + PostgreSQL حقيقي، فكان `retention.test.ts` يفشل بـ `Test timed out in 5000ms` عند تشغيل `tsc`/`vitest` للفرونت بالتوازي على نفس الجهاز (تنافس موارد، لا خطأ منطقي). الحل: `testTimeout: 30000` + `hookTimeout: 30000` في `server/vitest.config.ts`. النتيجة بعد الإصلاح: **60/60** في ~29s حتى تحت الحمل.
+- **قاعدة تشغيل على هذا الجهاز:** شغّل الفحوص الثقيلة **متتابعة** لا متوازية إن ظهرت فشل غير منطقي (مثال: E2E يحتاج `--workers=1`، والاختبارات الزمنية محتاجة مهل أوسع).
 
 ## سكربتات مساعدة (scripts/debug/)
 - `deploy-check.cjs` — فحص النشر الشامل (SPA + deep-link + nginx proxy + bundle + ollama + AI chain + courses).
