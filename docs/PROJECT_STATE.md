@@ -82,6 +82,26 @@
 ## ما يتبقى (تنفيذي)
 1. **تدوير مفاتيح API** (المالك فقط) — الإجراء الوحيد المتبقي.
 
+### من أين تُجلب مفاتيح API (لوحات المزودين)
+المشروع يستخدم المزودين التالين (المذكورون فعليا في `server/.env` و`server/src/routes/ai.ts`). المفاتيح **غير متتبعة في Git** إطلاقا:
+
+| المتغير | المزود | رابط المفتاح | ملاحظة |
+|---|---|---|---|
+| `GROQ_API_KEY` | Groq | https://console.groq.com/keys | **الرقم 1** + بيشغّل الصوت STT/TTS كمان |
+| `GOOGLE_AI_API_KEY` | Google AI Studio (Gemini) | https://aistudio.google.com/apikey | console مستقل عن Google OAuth |
+| `OPENROUTER_API_KEY` | OpenRouter | https://openrouter.ai/keys | موديلات `:free` |
+| `CEREBRAS_API_KEY` | Cerebras | https://cloud.cerebras.ai/ | الـ chat بيرجع 402 من غير quota |
+| `MISTRAL_API_KEY` | Mistral | https://console.mistral.ai/api-keys/ | |
+| `DEEPINFRA_API_KEY` | DeepInfra | https://deepinfra.com/dash/api_keys | |
+| `HUGGINGFACE_API_KEY` | HuggingFace | https://huggingface.co/settings/tokens | لازم صلاحية "Make calls to Inference Providers" (لازمة للـ RAG embeddings) |
+| `GITHUB_TOKEN` | GitHub Models | https://github.com/settings/tokens | اعمل توكن بصلاحية **Models: read** |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | Google Cloud (OAuth) | https://console.cloud.google.com/apis/credentials | لتسجيل الدخول بـ Google (OAuth client → Web application) |
+| `SESSION_SECRET` / `COOKIE_SECRET` | **بدون موقع** | — | توليد محلي: `node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"` |
+| — (Ollama) | Ollama محلي | https://ollama.com/download | **بدون أي مفتاح** — مجاني وغير محدود |
+
+- لسيرفر GPU خاص (أولوية رقم 1 في السلسلة): RunPod — https://runpod.io | Vast.ai — https://vast.ai
+- نفس الروابط مضافة كتعليقات داخل `server/.env.example` بجانب كل متغير.
+
 ### أُنجز بالكامل 2026-09-15 (التحقق النهائي)
 - **E2E بمتصفح حقيقي**: `node scripts/debug/run-e2e.cjs tests/e2e --reporter=line --workers=1` → **13/13** ✅ (auth: تسجيل/دخول/دخول admin/خروج/روابط، learning-persistence: 3 اختبارات، navigation: 2، roles: 3).
   - ملاحظة: التشغيل بـ `--workers=1` ضروري على هذا الجهاز؛ التوازي (2 workers) يسبب فشل في `roles` بسبب تنافس على الموارد لا بسبب الكود — كل اختبار ينجح منفردا.
