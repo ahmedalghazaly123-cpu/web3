@@ -139,3 +139,6 @@
 - `grep.cjs` / `print-lines.cjs` / `sleep.cjs` — مساعدات قراءة/انتظار (تتجنب مشاكل quoting في Windows).
 - `commit.cjs` — تنفيذ `git commit` بتمرير argv مباشرة (يتجنب تمزيق علامات التنصيص في cmd.exe).
 - `doc-scripts-check.cjs` — تطابق قائمة السكربتات في هذه الوثيقة مع الواقع على القرص.
+- `putenv-silent.cjs` — كتابة أسرار من ملف JSON **بدون طباعة القيم** (أسماء + أطوال فقط) — للصق المفاتيح بأمان.
+- `env-status.cjs` — عرض حالة المفاتيح (SET بطولها / EMPTY) **بدون طباعة أي قيمة**.
+- `verify-providers.cjs` — فحص كل مفتاح مزود (HTTP status فقط، بدون طباعة مفاتيح أو محتوى).

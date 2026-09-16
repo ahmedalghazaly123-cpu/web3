@@ -52,8 +52,16 @@ if (process.env.CUSTOM_LLM_2_BASE_URL) {
 if (process.env.GROQ_API_KEY) {
   PROVIDER_MODEL_CANDIDATES.push({ name: 'groq', baseUrl: 'https://api.groq.com/openai/v1', apiKey: process.env.GROQ_API_KEY, models: [process.env.GROQ_MODEL || 'openai/gpt-oss-120b', 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'] });
 }
+// OpenRouter hosts MANY free models behind ONE key (not a single model).
+// The cascade tries them in order: 404/402/429 on one auto-falls to the next
+// on the SAME provider before moving on. Add/remove :free models here.
+// Discover current free models: GET https://openrouter.ai/api/v1/models
 if (process.env.OPENROUTER_API_KEY) {
-  PROVIDER_MODEL_CANDIDATES.push({ name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: process.env.OPENROUTER_API_KEY, models: [process.env.OPENROUTER_MODEL || 'liquid/lfm-2.5-2.6b:free', 'google/gemma-4-26b-a4b-it:free', 'nvidia/nemotron-3.5-lightning:free', 'cohere/north-mini-code:free', 'nvidia/nemotron-3-ultra-550b-a55b:free'], extraHeaders: { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'LearnPilot' } });
+  const openrouterModels = (process.env.OPENROUTER_MODEL || 'liquid/lfm-2.5-2.6b:free,google/gemma-4-26b-a4b-it:free,nvidia/nemotron-3.5-lightning:free,cohere/north-mini-code:free,nvidia/nemotron-3-ultra-550b-a55b:free')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  PROVIDER_MODEL_CANDIDATES.push({ name: 'openrouter', baseUrl: 'https://openrouter.ai/api/v1', apiKey: process.env.OPENROUTER_API_KEY, models: openrouterModels, extraHeaders: { 'HTTP-Referer': 'http://localhost:3000', 'X-Title': 'LearnPilot' } });
 }
 if (process.env.CEREBRAS_API_KEY) {
   PROVIDER_MODEL_CANDIDATES.push({ name: 'cerebras', baseUrl: 'https://api.cerebras.ai/v1', apiKey: process.env.CEREBRAS_API_KEY, models: [process.env.CEREBRAS_MODEL || 'qwen-3.8-27b', 'gpt-oss-120b'] });
