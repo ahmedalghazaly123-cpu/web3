@@ -1,0 +1,30 @@
+learnpilot-server  | Datasource "db": PostgreSQL database "learnpilot", schema "public" at "postgres:5432"
+learnpilot-server  | 
+learnpilot-server  | 8 migrations found in prisma/migrations
+learnpilot-server  | 
+learnpilot-server  | 
+learnpilot-server  | No pending migrations to apply.
+learnpilot-server  | PostgreSQL connected
+learnpilot-server  | Admin invite bootstrap code ready: Ahmed
+learnpilot-server  | Server running on http://localhost:4000
+learnpilot-server  | ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+learnpilot-server  |     at Object.xForwardedForHeader (file:///app/node_modules/express-rate-limit/dist/index.mjs:157:13)
+learnpilot-server  |     at wrappedValidations.<computed> [as xForwardedForHeader] (file:///app/node_modules/express-rate-limit/dist/index.mjs:369:22)
+learnpilot-server  |     at Object.keyGenerator (file:///app/node_modules/express-rate-limit/dist/index.mjs:630:20)
+learnpilot-server  |     at file:///app/node_modules/express-rate-limit/dist/index.mjs:682:32
+learnpilot-server  |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+learnpilot-server  |     at async file:///app/node_modules/express-rate-limit/dist/index.mjs:663:5 {
+learnpilot-server  |   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+learnpilot-server  |   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+learnpilot-server  | }
+learnpilot-server  | ValidationError: The 'X-Forwarded-For' header is set but the Express 'trust proxy' setting is false (default). This could indicate a misconfiguration which would prevent express-rate-limit from accurately identifying users. See https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/ for more information.
+learnpilot-server  |     at Object.xForwardedForHeader (file:///app/node_modules/express-rate-limit/dist/index.mjs:157:13)
+learnpilot-server  |     at wrappedValidations.<computed> [as xForwardedForHeader] (file:///app/node_modules/express-rate-limit/dist/index.mjs:369:22)
+learnpilot-server  |     at Object.keyGenerator (file:///app/node_modules/express-rate-limit/dist/index.mjs:630:20)
+learnpilot-server  |     at file:///app/node_modules/express-rate-limit/dist/index.mjs:682:32
+learnpilot-server  |     at process.processTicksAndRejections (node:internal/process/task_queues:95:5)
+learnpilot-server  |     at async file:///app/node_modules/express-rate-limit/dist/index.mjs:663:5 {
+learnpilot-server  |   code: 'ERR_ERL_UNEXPECTED_X_FORWARDED_FOR',
+learnpilot-server  |   help: 'https://express-rate-limit.github.io/ERR_ERL_UNEXPECTED_X_FORWARDED_FOR/'
+learnpilot-server  | }
+learnpilot-server  | [retention] scanned=13 purgedUsers=2 deleted=6 expiredSessions=0 errors=0

@@ -4,9 +4,105 @@ import { authMiddleware } from '../middleware/auth.js';
 import { requireRole } from '../middleware/rbac.js';
 import { Role } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
-import { auditLogService } from '../services/index.js';
+import { auditLogService, inviteCodeService } from '../services/index.js';
 
 const router = express.Router();
+
+// ─── Admin invite / security codes (Owner-only) ──────────────────────────────
+// The Owner issues codes; Admins must enter a valid code at signup AND at
+// every login. The code is stored on the admin account (bcrypt hash).
+
+router.get('/invite-codes', authMiddleware, requireRole([Role.OWNER]), async (req: Request, res: Response) => {
+  try {
+    const codes = await inviteCodeService.list();
+    const admins = await inviteCodeService.listAdminsWithCodes();
+    res.json({ codes, admins });
+  } catch (e) {
+    console.error('List invite codes error:', e);
+    res.status(500).json({ error: 'internal-server-error' });
+  }
+});
+
+router.post('/invite-codes', authMiddleware, requireRole([Role.OWNER]), async (req: Request, res: Response) => {
+  try {
+    const body = z.object({
+      code: z.string().trim().min(3).max(64).optional(),
+      label: z.string().trim().max(120).optional(),
+      maxUses: z.coerce.number().int().min(0).max(100000).default(1),
+      expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+    }).parse(req.body);
+    const invite = await inviteCodeService.create({
+      role: Role.ADMIN,
+      code: body.code,
+      label: body.label,
+      maxUses: body.maxUses,
+      expiresAt: body.expiresAt ? new Date(body.expiresAt) : null,
+      createdById: req.userId,
+    });
+    void auditLogService.log({
+      action: 'owner.invite-code.create',
+      targetType: 'invite_code',
+      targetId: invite.id,
+      actorId: req.userId,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') ?? undefined,
+      metadata: { code: invite.code },
+    });
+    res.status(201).json({ invite });
+  } catch (e: any) {
+    if (e?.status === 409) return res.status(409).json({ error: 'code-taken' });
+    console.error('Create invite code error:', e);
+    res.status(400).json({ error: e?.message ?? 'validation' });
+  }
+});
+
+router.patch('/invite-codes/:id', authMiddleware, requireRole([Role.OWNER]), async (req: Request, res: Response) => {
+  try {
+    const body = z.object({
+      active: z.boolean().optional(),
+      maxUses: z.coerce.number().int().min(0).max(100000).optional(),
+      expiresAt: z.string().datetime({ offset: true }).nullable().optional(),
+      label: z.string().trim().max(120).nullable().optional(),
+    }).parse(req.body);
+    const invite = await inviteCodeService.update(req.params.id, {
+      active: body.active,
+      maxUses: body.maxUses,
+      expiresAt: body.expiresAt === undefined ? undefined : body.expiresAt ? new Date(body.expiresAt) : null,
+      label: body.label === null ? undefined : body.label,
+    });
+    void auditLogService.log({
+      action: 'owner.invite-code.update',
+      targetType: 'invite_code',
+      targetId: invite.id,
+      actorId: req.userId,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') ?? undefined,
+      metadata: { active: invite.active },
+    });
+    res.json({ invite });
+  } catch (e: any) {
+    console.error('Update invite code error:', e);
+    res.status(400).json({ error: e?.message ?? 'validation' });
+  }
+});
+
+router.delete('/invite-codes/:id', authMiddleware, requireRole([Role.OWNER]), async (req: Request, res: Response) => {
+  try {
+    await inviteCodeService.remove(req.params.id);
+    void auditLogService.log({
+      action: 'owner.invite-code.delete',
+      targetType: 'invite_code',
+      targetId: req.params.id,
+      actorId: req.userId,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent') ?? undefined,
+    });
+    res.status(204).end();
+  } catch (e: any) {
+    console.error('Delete invite code error:', e);
+    res.status(400).json({ error: e?.message ?? 'validation' });
+  }
+});
 
 // Owner-only: promote user to OWNER
 router.post('/users/:id/role', authMiddleware, requireRole([Role.OWNER]), async (req: Request, res: Response) => {

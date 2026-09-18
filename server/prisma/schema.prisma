@@ -10,15 +10,29 @@ datasource db {
 model User {
   id               String   @id @default(uuid())
   email            String   @unique
-  passwordHash     String
+  /// Null until the user sets the site password. Social-first accounts are
+  /// created without one and must set it once (passwordSetAt) before email
+  /// sign-in works.
+  passwordHash     String?
+  passwordSetAt    DateTime?
   name             String
   role             Role     @default(STUDENT)
   locale           String   @default("en")
   timezone         String   @default("UTC")
+  /// Verified social-provider identities bound to this one account, so a
+  /// Google/GitHub/LinkedIn sign-in and an e-mail sign-in resolve to the same row.
+  googleId         String?  @unique
+  githubId         String?  @unique
+  linkedinId       String?  @unique
   organizationId   String?
   studentProfileId String?
   teacherProfileId String?
   parentProfileId  String?
+  // Admin onboarding: the invite/security code this account was registered with
+  // (a bcrypt hash) plus the invite-code row it consumed, so the Owner can audit
+  // which code created which admin.
+  inviteCodeId     String?
+  securityCodeHash String?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
@@ -54,6 +68,9 @@ model User {
   gradedSubmissions  Submission[]            @relation("SubmissionGrader")
   files              File[]
   classrooms         Classroom[]
+
+  inviteCode       InviteCode?  @relation("InviteCodeRedeemed", fields: [inviteCodeId], references: [id], onDelete: SetNull)
+  createdInvites   InviteCode[] @relation("InviteCodeCreator")
 
   xpEvents          XpEvent[]
   consents          ConsentRecord[]
@@ -929,6 +946,30 @@ model Session {
   @@index([userId])
   @@index([expiresAt])
   @@map("sessions")
+}
+
+/// Invite / security codes created by the Owner to onboard Admins (role ADMIN).
+/// `maxUses = 0` means unlimited. A code is usable while `active` is true and
+/// `expiresAt` is either null or in the future.
+model InviteCode {
+  id          String    @id @default(uuid())
+  code        String    @unique
+  role        Role      @default(ADMIN)
+  label       String?
+  createdById String?
+  createdBy   User?     @relation("InviteCodeCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  maxUses     Int       @default(1)
+  uses        Int       @default(0)
+  active      Boolean   @default(true)
+  expiresAt   DateTime?
+  lastUsedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  redeemedBy User[] @relation("InviteCodeRedeemed")
+
+  @@index([active, role])
+  @@map("invite_codes")
 }
 
 model Enrollment {

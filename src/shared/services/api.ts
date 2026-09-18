@@ -24,12 +24,15 @@ async function request(path: string, options: RequestInit = {}) {
 export const api = {
   baseURL: (): string => API_BASE,
   auth: {
-    signup: (data: { email: string; password: string; name: string; role: string }) =>
+    signup: (data: { email: string; password: string; name: string; role: string; inviteCode?: string }) =>
       request('/auth/signup', { method: 'POST', body: JSON.stringify(data) }),
-    login: (data: { email: string; password: string }) =>
+    login: (data: { email: string; password: string; inviteCode?: string }) =>
       request('/auth/login', { method: 'POST', body: JSON.stringify(data) }),
     logout: () => request('/auth/logout', { method: 'POST' }),
     me: () => request('/auth/me'),
+    providers: () => request('/auth/providers'),
+    setPassword: (data: { token: string; password: string }) =>
+      request('/auth/set-password', { method: 'POST', body: JSON.stringify(data) }),
   },
   users: {
     me: () => request('/users/me'),
@@ -140,6 +143,13 @@ export const api = {
   },
   owner: {
     changeRole: (id: string, role: string) => request(`/owner/users/${id}/role`, { method: 'POST', body: JSON.stringify({ role }) }),
+    // Admin invite / security codes (Owner-issued, required by Admin login).
+    inviteCodes: () => request('/owner/invite-codes'),
+    createInviteCode: (data: { code?: string; label?: string; maxUses?: number; expiresAt?: string | null }) =>
+      request('/owner/invite-codes', { method: 'POST', body: JSON.stringify(data) }),
+    updateInviteCode: (id: string, data: { active?: boolean; maxUses?: number; expiresAt?: string | null; label?: string | null }) =>
+      request(`/owner/invite-codes/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    deleteInviteCode: (id: string) => request(`/owner/invite-codes/${id}`, { method: 'DELETE' }),
     listFeatureFlags: () => request('/owner/feature-flags'),
     updateFeatureFlag: (key: string, data: any) => request(`/owner/feature-flags/${key}`, { method: 'PUT', body: JSON.stringify(data) }),
     getAiGatewayPolicy: () => request('/owner/ai-gateway-policy'),

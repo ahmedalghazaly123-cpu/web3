@@ -12,8 +12,8 @@ import { LanguageSwitcher } from '../../../shared/components/ui/LanguageSwitcher
 import { useToast } from '../../../shared/components/ui/ToastProvider';
 import { cn } from '../../../shared/lib/utils';
 import type { UserRole } from '../../../app/types';
-import { ROLE_HOME } from '../../../shared/lib/mockAuth';
-import { useAuth } from '../../../app/layout/AuthProvider';
+import { ROLE_HOME, getDemoCredentials, DEMO_ADMIN_INVITE_CODE } from '../../../shared/lib/mockAuth';
+import { useAuth, getLastAuthError } from '../../../app/layout/AuthProvider';
 import { api } from '../../../shared/services/api';
 
 function GoogleIcon() {
@@ -35,10 +35,10 @@ function GitHubIcon() {
   );
 }
 
-function AppleIcon() {
+function LinkedInIcon() {
   return (
     <svg className="w-[18px] h-[18px] fill-current" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M17.05 20.3c-.9.9-1.9 1.6-3 1.5-1.2-.1-2.3-.7-3.1-.7-.8 0-2 .7-3.2.7-1.3 0-2.4-1-3.2-2.4C5.8 16.7 5.5 12.9 6.6 10c.7-1.8 2-3.4 3.8-3.6 1.1-.1 2.1.7 2.9.7.8 0 2-1 3.4-.9 1.5.1 2.8 1 3.6 2.4-2.9 1.6-3.6 4.5-3 6.3.4 1.3 1.4 2.3 2.75 2.4M12.6 6.2c.1-2 1.6-3.8 3.4-4.2-.2 2.1-1.8 4-3.4 4.2" />
+      <path d="M20.45 20.45h-3.55v-5.57c0-1.33-.03-3.04-1.85-3.04-1.86 0-2.14 1.45-2.14 2.94v5.67H9.35V9h3.41v1.56h.05c.47-.9 1.63-1.85 3.36-1.85 3.6 0 4.27 2.37 4.27 5.45v6.29zM5.34 7.43a2.06 2.06 0 1 1 0-4.12 2.06 2.06 0 0 1 0 4.12zM7.12 20.45H3.55V9h3.57v11.45z" />
     </svg>
   );
 }
@@ -88,12 +88,21 @@ export function RoleLoginBody(p: { role: UserRole }) {
   const roleName = t(`roleLogin.roles.${role}`);
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [name, setName] = useState('');
+  // Admin sign-in is invite-gated: email + password + the Owner-issued code.
+  const [inviteCode, setInviteCode] = useState('');
+  const [inviteErr, setInviteErr] = useState('');
+  const isAdmin = role === 'admin';
+  // The Owner account is provisioned by the platform (seeded), so the backend
+  // refuses `role=owner` signups. Don't offer a tab that can never succeed.
+  const canSignup = role !== 'owner';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
   const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [socialLoading, setSocialLoading] = useState<string | null>(null);
+  const [socialLoading] = useState<string | null>(null);
+  // Which social providers the backend reports as configured (Google/GitHub/Apple).
+  const [providers, setProviders] = useState<Record<string, boolean> | null>(null);
   const [nameErr, setNameErr] = useState('');
   const [emailErr, setEmailErr] = useState('');
   const [pwErr, setPwErr] = useState('');
@@ -103,52 +112,85 @@ export function RoleLoginBody(p: { role: UserRole }) {
   const [resetErr, setResetErr] = useState('');
   const [resetSent, setResetSent] = useState(false);
   const rtl = i18n.dir() === 'rtl';
-  const { login, signup, authenticated, role: sessionRole } = useAuth();
-  const goHome = () => {
-    // Backend is authoritative: navigate by the *session* role.
-    // The old code used the page prop (ROLE_HOME[role]) which bounced
-    // back to /account-type whenever the stored session role mismatched.
-    navigate(ROLE_HOME[sessionRole] ?? ROLE_HOME[role], { replace: true });
-  };
+  const { login, signup } = useAuth();
   useEffect(() => {
-    if (authenticated && sessionRole) goHome();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authenticated, sessionRole]);
-  const quickSignIn = () => {
-    setFormErr('');
-    if (!email || !password) {
-      setFormErr(t('authFailed'));
+    api.auth.providers().then(setProviders).catch(() => setProviders({}));
+  }, []);
+  const goHome = () => navigate(ROLE_HOME[role], { replace: true });
+  /**
+   * The backend owns the role, so a sign-in can resolve to a *different* role
+   * than the page the user picked (e.g. a Student account on /login/teacher).
+   * In that case we say so instead of silently bouncing to another dashboard.
+   */
+  const finishSignIn = (resolvedRole: UserRole) => {
+    if (resolvedRole === role) {
+      goHome();
       return;
     }
+    setFormErr(t('roleMismatch', { role: t(`roleLogin.roles.${resolvedRole}`) }));
+    window.setTimeout(() => navigate(ROLE_HOME[resolvedRole], { replace: true }), 2500);
+  };
+  const quickSignIn = () => {
+    setFormErr('');
+    // "Sign in instantly" works even with an empty form: fall back to the
+    // seeded demo account of the selected role.
+    const demo = getDemoCredentials(role);
+    const nextEmail = email || demo.email;
+    const nextPassword = password || demo.password;
+    if (!email) setEmail(nextEmail);
+    if (!password) setPassword(nextPassword);
+    // Admin is invite-gated: an empty field falls back to the fixed demo code.
+    let code = isAdmin ? inviteCode.trim() : undefined;
+    if (isAdmin && !code) code = fillInviteDemo();
     setLoading(true);
     window.setTimeout(() => {
-      login(role, email, password).then((ok) => {
+      login(role, nextEmail, nextPassword, code).then((resolved) => {
         setLoading(false);
-        if (ok) goHome();
-        else setFormErr(t('authFailed'));
+        if (resolved) finishSignIn(resolved);
+        else setFormErr(mapAuthError(getLastAuthError()));
+      }).catch((e: unknown) => {
+        setLoading(false);
+        setFormErr(mapAuthError(e instanceof Error ? e.message : e));
       });
     }, 450);
   };
-  const social = (provider: 'google' | 'github' | 'apple') => {
+  const social = (provider: 'google' | 'github' | 'linkedin') => {
     setFormErr('');
-    // Google uses the real OAuth flow on the backend; GitHub/Apple remain placeholders.
+    // All three providers use the real OAuth flow on the backend; GitHub/LinkedIn
+    // only redirect when the backend reports them configured (GET /auth/providers).
     if (provider === 'google') {
-      window.location.href = `${api.baseURL()}/auth/google`;
+      window.location.href = `${api.baseURL()}/auth/google?role=${encodeURIComponent(role)}`;
       return;
     }
-    setSocialLoading(provider);
-    window.setTimeout(() => {
-      login(role, email, password).then((ok) => {
-        setSocialLoading(null);
-        setLoading(false);
-        if (ok) goHome();
-        else setFormErr(t('authFailed'));
-      });
-    }, 500);
+    if (providers && !providers[provider]) {
+      setFormErr(t('setPassword.providerUnavailable', { provider: provider === 'github' ? 'GitHub' : 'LinkedIn' }));
+      return;
+    }
+    window.location.href = `${api.baseURL()}/auth/${provider}?role=${encodeURIComponent(role)}`;
   };
   const switchMode = (m: 'signin' | 'signup') => {
     setMode(m);
-    setFormErr(''); setNameErr(''); setEmailErr(''); setPwErr('');
+    setFormErr(''); setNameErr(''); setEmailErr(''); setPwErr(''); setInviteErr('');
+  };
+
+  const mapAuthError = (message: unknown): string => {
+    const msg = typeof message === 'string' ? message : '';
+    if (/email-taken/i.test(msg)) return t('roleLogin.emailTaken');
+    if (/invite-code-required/i.test(msg)) return t('roleLogin.inviteRequired');
+    if (/invalid-invite-code/i.test(msg)) return t('roleLogin.inviteInvalid');
+    if (/role_requires_invite/i.test(msg)) return t('roleLogin.ownerInviteOnly');
+    if (/password-not-set/i.test(msg)) return t('setPassword.passwordNotSet');
+    if (/link-expired/i.test(msg)) return t('setPassword.linkExpired');
+    if (/password-already-set/i.test(msg)) return t('setPassword.alreadySet');
+    return t('authFailed');
+  };
+  const requireInvite = (): boolean => {
+    if (isAdmin && !inviteCode.trim()) {
+      setInviteErr(t('roleLogin.inviteRequired'));
+      return false;
+    }
+    if (inviteErr) setInviteErr('');
+    return true;
   };
 
   const emailOk = (v: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
@@ -160,13 +202,18 @@ export function RoleLoginBody(p: { role: UserRole }) {
     else setEmailErr('');
     if (password.length < 6) { setPwErr(t('passwordTooShort')); ok = false; }
     else setPwErr('');
+    if (!requireInvite()) ok = false;
     if (!ok) { setFormErr(t('authFailed')); return; }
     setLoading(true);
+    const code = isAdmin ? inviteCode.trim() : undefined;
     window.setTimeout(() => {
-      login(role, email, password).then((res) => {
+      login(role, email, password, code).then((resolved) => {
         setLoading(false);
-        if (res) goHome();
-        else setFormErr(t('authFailed'));
+        if (resolved) finishSignIn(resolved);
+        else setFormErr(mapAuthError(getLastAuthError()));
+      }).catch((e: unknown) => {
+        setLoading(false);
+        setFormErr(mapAuthError(e instanceof Error ? e.message : e));
       });
     }, 600);
   };
@@ -180,17 +227,36 @@ export function RoleLoginBody(p: { role: UserRole }) {
     else setEmailErr('');
     if (password.length < 6) { setPwErr(t('passwordTooShort')); ok = false; }
     else setPwErr('');
+    if (!requireInvite()) ok = false;
     if (!ok) return;
     setLoading(true);
+    const code = isAdmin ? inviteCode.trim() : undefined;
     window.setTimeout(() => {
-      signup(role, name, email, password).then((res) => {
+      signup(role, name, email, password, code).then((resolved) => {
         setLoading(false);
-        if (res) goHome();
-        else setFormErr(t('roleLogin.emailTaken'));
+        if (resolved) finishSignIn(resolved);
+        else setFormErr(mapAuthError(getLastAuthError()));
+      }).catch((e: unknown) => {
+        setLoading(false);
+        // The provider throws a generic 'signup-failed'; prefer the server's
+        // real reason (email-taken / invite-invalid / …) captured on it.
+        setFormErr(mapAuthError(getLastAuthError() || (e instanceof Error ? e.message : e)));
       });
     }, 700);
   };
-  const fillDemo = () => { setEmail(''); setPassword(''); setFormErr(''); };
+  const fillDemo = () => {
+    const demo = getDemoCredentials(role);
+    setEmail(demo.email);
+    setPassword(demo.password);
+    setEmailErr(''); setPwErr(''); setInviteErr(''); setFormErr('');
+    if (isAdmin) fillInviteDemo();
+  };
+  /** Fills the Admin invite / security field with the fixed demo code. */
+  const fillInviteDemo = (): string => {
+    setInviteCode(DEMO_ADMIN_INVITE_CODE);
+    setInviteErr('');
+    return DEMO_ADMIN_INVITE_CODE;
+  };
   const tabCls = (active: boolean) => active
     ? 'bg-surface text-text-primary shadow-sm border border-surface-border'
     : 'text-text-secondary hover:text-text-primary border border-transparent';
@@ -234,13 +300,15 @@ export function RoleLoginBody(p: { role: UserRole }) {
             </div>
             <h1 className="h2 text-text-primary">{mode === 'signin' ? t('roleLogin.title', { role: roleName }) : t('roleLogin.signupTitle', { role: roleName })}</h1>
             <p className="body-sm text-text-secondary mt-1 mb-5">{mode === 'signin' ? t('roleLogin.subtitle', { role: roleName }) : t('roleLogin.signupSubtitle', { role: roleName })}</p>
-            <div className="grid grid-cols-2 gap-1 rounded-xl bg-surface-secondary p-1 mb-5" role="tablist" aria-label={roleName}>
+            <div className={cn('grid gap-1 rounded-xl bg-surface-secondary p-1 mb-5', canSignup ? 'grid-cols-2' : 'grid-cols-1')} role="tablist" aria-label={roleName}>
               <button type="button" role="tab" aria-selected={mode === 'signin'} onClick={() => switchMode('signin')} className={cn('inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold min-h-[40px]', tabCls(mode === 'signin'))}>
                 <LogIn className="w-4 h-4" aria-hidden="true" />{t('roleLogin.signinTab')}
               </button>
-              <button type="button" role="tab" aria-selected={mode === 'signup'} onClick={() => switchMode('signup')} className={cn('inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold min-h-[40px]', tabCls(mode === 'signup'))}>
-                <UserPlus className="w-4 h-4" aria-hidden="true" />{t('roleLogin.signupTab')}
-              </button>
+              {canSignup && (
+                <button type="button" role="tab" aria-selected={mode === 'signup'} onClick={() => switchMode('signup')} className={cn('inline-flex items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-sm font-semibold min-h-[40px]', tabCls(mode === 'signup'))}>
+                  <UserPlus className="w-4 h-4" aria-hidden="true" />{t('roleLogin.signupTab')}
+                </button>
+              )}
             </div>
             <div className="rounded-xl border border-dashed border-surface-border-strong p-4 mb-5">
               <p className="flex items-center gap-2 text-sm font-bold text-text-primary mb-1">
@@ -275,6 +343,14 @@ export function RoleLoginBody(p: { role: UserRole }) {
                     </button>
                   </div>
                 </div>
+                {isAdmin && (
+                  <div>
+                    <Input label={t('roleLogin.inviteLabel')} type="text" autoComplete="off"
+                      placeholder={t('roleLogin.invitePlaceholder')} required value={inviteCode}
+                      onChange={(e) => { setInviteCode(e.target.value); if (inviteErr) setInviteErr(''); }} error={inviteErr || undefined} />
+                    <p className="text-caption text-text-secondary mt-1.5">{t('roleLogin.adminInviteNote')}</p>
+                  </div>
+                )}
                 <div className="flex items-center justify-between">
                   <label className="flex items-center gap-2 cursor-pointer min-h-[32px]">
                     <input type="checkbox" checked={remember} onChange={(e) => setRemember(e.target.checked)}
@@ -329,12 +405,27 @@ export function RoleLoginBody(p: { role: UserRole }) {
                 <Input label={t('passwordLabel')} type={showPw ? 'text' : 'password'} autoComplete="new-password"
                   placeholder="••••••••" required value={password}
                   onChange={(e) => setPassword(e.target.value)} error={pwErr || undefined} />
+                {isAdmin && (
+                  <div>
+                    <Input label={t('roleLogin.inviteLabel')} type="text" autoComplete="off"
+                      placeholder={t('roleLogin.invitePlaceholder')} required value={inviteCode}
+                      onChange={(e) => { setInviteCode(e.target.value); if (inviteErr) setInviteErr(''); }} error={inviteErr || undefined} />
+                    <p className="text-caption text-text-secondary mt-1.5">{t('roleLogin.adminInviteNote')}</p>
+                  </div>
+                )}
                 <Button type="submit" variant={theme.button} size="lg" fullWidth isLoading={loading && !socialLoading}
                   rightIcon={!loading ? <UserPlus className="w-4 h-4" aria-hidden="true" /> : undefined}>
                   {loading && !socialLoading ? t('roleLogin.creatingAccount') : t('roleLogin.createAccount')}
                 </Button>
               </form>
             )}
+            {isAdmin ? (
+              <p className="body-sm text-text-secondary text-center mt-5 flex items-center justify-center gap-2">
+                <Shield className="w-4 h-4 text-accent" aria-hidden="true" />
+                {t('roleLogin.adminInviteNote')}
+              </p>
+            ) : (
+              <>
             <div className="flex items-center gap-3 my-5" aria-hidden="true">
               <span className="flex-1 h-px bg-surface-border" />
               <span className="text-caption text-text-tertiary">{t('orContinue')}</span>
@@ -349,18 +440,27 @@ export function RoleLoginBody(p: { role: UserRole }) {
                 {socialLoading === 'github' ? <span className="w-[18px] h-[18px] rounded-full border-2 border-surface-border border-t-brand animate-spin" /> : <GitHubIcon />}
                 {t('roleLogin.github')}
               </button>
-              <button type="button" onClick={() => social('apple')} disabled={socialLoading !== null} className={socialBtn}>
-                {socialLoading === 'apple' ? <span className="w-[18px] h-[18px] rounded-full border-2 border-surface-border border-t-brand animate-spin" /> : <AppleIcon />}
-                {t('apple')}
+              <button type="button" onClick={() => social('linkedin')} disabled={socialLoading !== null} className={socialBtn}>
+                {socialLoading === 'linkedin' ? <span className="w-[18px] h-[18px] rounded-full border-2 border-surface-border border-t-brand animate-spin" /> : <LinkedInIcon />}
+                {t('roleLogin.linkedin')}
               </button>
             </div>
-            <p className="body-sm text-text-secondary text-center mt-5">
-              {mode === 'signin' ? t('noAccount') : t('hasAccount')}{' '}
-              <button type="button" onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
-                className="font-semibold text-brand hover:text-brand-hover">
-                {mode === 'signin' ? t('roleLogin.signupTab') : t('roleLogin.signinTab')}
-              </button>
-            </p>
+              </>
+            )}
+            {canSignup ? (
+              <p className="body-sm text-text-secondary text-center mt-5">
+                {mode === 'signin' ? t('noAccount') : t('hasAccount')}{' '}
+                <button type="button" onClick={() => switchMode(mode === 'signin' ? 'signup' : 'signin')}
+                  className="font-semibold text-brand hover:text-brand-hover">
+                  {mode === 'signin' ? t('roleLogin.signupTab') : t('roleLogin.signinTab')}
+                </button>
+              </p>
+            ) : (
+              <p className="body-sm text-text-secondary text-center mt-5 flex items-center justify-center gap-2">
+                <Crown className="w-4 h-4 text-warning" aria-hidden="true" />
+                {t('roleLogin.ownerInviteOnly')}
+              </p>
+            )}
             <div className="border-t border-surface-border mt-5 pt-4 text-center">
               <Link to="/account-type" className="inline-flex items-center gap-2 text-sm font-medium text-text-secondary hover:text-brand min-h-[44px] px-3">
                 <ArrowRight className={cn('w-4 h-4', !rtl && 'rotate-180')} aria-hidden="true" />

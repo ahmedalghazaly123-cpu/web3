@@ -49,11 +49,19 @@ const MOCK_PROFILES: Record<UserRole, MockUser> = {
  * is accepted for these e-mails by `mockSignInWithPassword`.
  */
 export const DEMO_CREDENTIALS: Record<UserRole, { email: string; password: string; name: string }> = {
-  student: { email: 'student@learnpilot.dev', password: 'student123', name: 'Ahmed Hassan' },
-  teacher: { email: 'teacher@learnpilot.dev', password: 'teacher123', name: 'Sara Mahmoud' },
-  admin: { email: 'admin@learnpilot.dev', password: 'admin123', name: 'Omar Khaled' },
-  owner: { email: 'owner@learnpilot.dev', password: 'owner123', name: 'Layla Ibrahim' },
+  // These must match `server/prisma/seed.ts` (password: learnpilot) so the
+  // login page's "Autofill" button works against the real backend too.
+  student: { email: 'student@learnpilot.dev', password: 'learnpilot', name: 'Ahmed Hassan' },
+  teacher: { email: 'teacher@learnpilot.dev', password: 'learnpilot', name: 'Sara Mahmoud' },
+  admin: { email: 'admin@learnpilot.dev', password: 'learnpilot', name: 'Omar Khaled' },
+  owner: { email: 'owner@learnpilot.dev', password: 'learnpilot', name: 'Layla Ibrahim' },
 };
+
+/**
+ * Fixed Owner-issued Admin invite / security code. Kept in sync with the server
+ * default (ADMIN_INVITE_CODE) so the demo box can sign an Admin in with one click.
+ */
+export const DEMO_ADMIN_INVITE_CODE = 'Ahmed';
 
 export interface SignInResult {
   ok: boolean;
@@ -130,8 +138,8 @@ export function mockSignInWithPassword(role: UserRole, email: string, _password:
   return { ok: false, session: null, error: 'invalid-credentials' };
 }
 
-/** Mock social sign-in (Google / GitHub / Apple): instant, fixed-role session. */
-export function mockSocialSignIn(role: UserRole, provider: 'google' | 'github' | 'apple'): MockSession {
+/** Mock social sign-in (Google / GitHub / LinkedIn): instant, fixed-role session. */
+export function mockSocialSignIn(role: UserRole, provider: 'google' | 'github' | 'linkedin'): MockSession {
   const base = MOCK_PROFILES[role];
   const session = mockSignIn(role, { email: base.email, name: base.name });
   // Record provider for dev clarity without breaking the session shape.

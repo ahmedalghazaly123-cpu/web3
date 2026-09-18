@@ -265,3 +265,4 @@ export { privacyService } from './privacyService.js';
 export { voiceService } from './voiceService.js';
 export { sandboxService } from './sandboxService.js';
 export { collabService } from './collabService.js';
+export { inviteCodeService, bootstrapInviteCode, isUsable, generateInviteCode } from './inviteService.js';

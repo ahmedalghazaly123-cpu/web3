@@ -15,7 +15,9 @@ if (!args.length) {
 }
 
 const fd = fs.openSync(logPath, 'w');
-const child = spawn('npm.cmd', args, {
+// Node >= 20.12 refuses to spawn .cmd/.bat files directly (CVE-2024-27980),
+// so go through cmd.exe — `npm` still resolves via PATHEXT.
+const child = spawn('cmd.exe', ['/c', 'npm', ...args], {
   cwd: root,
   detached: true,
   windowsHide: true,

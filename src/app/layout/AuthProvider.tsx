@@ -5,13 +5,25 @@ import { learningSync } from '../../shared/services/learningSync';
 
 export type { UserRole } from '../types';
 
+/**
+ * Last error message from the auth API (e.g. `password-not-set`) so the role
+ * login pages can show the *server's* reason instead of a generic failure.
+ */
+let lastAuthError = '';
+export const getLastAuthError = (): string => lastAuthError;
+
 interface AuthContextValue {
   authenticated: boolean;
   ready: boolean;
   role: UserRole;
   user: { id: string; email: string; name: string; role: UserRole } | null;
-  login: (role: UserRole, email: string, password: string) => Promise<boolean>;
-  signup: (role: UserRole, name: string, email: string, password: string) => Promise<boolean>;
+  /**
+   * Signs in and resolves with the *authoritative* role from the backend
+   * (`null` when the credentials were rejected). The caller needs the real
+   * role to send the user to the dashboard that role owns.
+   */
+  login: (role: UserRole, email: string, password: string, inviteCode?: string) => Promise<UserRole | null>;
+  signup: (role: UserRole, name: string, email: string, password: string, inviteCode?: string) => Promise<UserRole | null>;
   logout: () => Promise<void>;
 }
 
@@ -65,20 +77,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     init();
   }, []);
 
-  const login = async (role: UserRole, email: string, password: string): Promise<boolean> => {
+  const login = async (role: UserRole, email: string, password: string, inviteCode?: string): Promise<UserRole | null> => {
+    lastAuthError = '';
     try {
-      const res = await api.auth.login({ email, password });
+      const res = await api.auth.login({ email, password, ...(inviteCode ? { inviteCode } : {}) });
       const token = (res as any).token;
       const user = (res as any).user as AuthContextValue['user'] | undefined;
       if (token && user) {
+        const resolved = (user.role || role).toLowerCase() as UserRole;
         localStorage.setItem('lp-auth-token', token);
         setAuthenticated(true);
-        setRole((user.role || role).toLowerCase() as UserRole);
+        setRole(resolved);
         setUser(user);
         void learningSync.hydrate(user.id);
-        return true;
+        return resolved;
       }
-    } catch {
+    } catch (e) {
+      // Keep the server's reason (e.g. `password-not-set`) for the login page.
+      lastAuthError = e instanceof Error ? e.message : '';
       if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true') {
         const { mockSignInWithPassword } = await import('../../shared/lib/mockAuth');
         const result = mockSignInWithPassword(role, email, password);
@@ -86,27 +102,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthenticated(true);
           setRole(result.session.role);
           setUser(result.session.user);
-        return true;
+        return result.session.role;
       }
       }
     }
-    return false;
+    return null;
   };
 
-  const signup = async (role: UserRole, name: string, email: string, password: string): Promise<boolean> => {
+  const signup = async (role: UserRole, name: string, email: string, password: string, inviteCode?: string): Promise<UserRole | null> => {
+    lastAuthError = '';
     try {
-      const res = await api.auth.signup({ email, password, name, role });
+      const res = await api.auth.signup({ email, password, name, role, ...(inviteCode ? { inviteCode } : {}) });
       const token = (res as any).token;
       const user = (res as any).user as AuthContextValue['user'] | undefined;
       if (token && user) {
+        const resolved = (user.role || role).toLowerCase() as UserRole;
         localStorage.setItem('lp-auth-token', token);
         setAuthenticated(true);
-        setRole((user.role || role).toLowerCase() as UserRole);
+        setRole(resolved);
         setUser(user);
         void learningSync.hydrate(user.id);
-        return true;
+        return resolved;
       }
-    } catch {
+    } catch (e) {
+      lastAuthError = e instanceof Error ? e.message : '';
       if (typeof process !== 'undefined' && process.env && process.env.NEXT_PUBLIC_USE_MOCK_AUTH === 'true') {
         const { mockSignUp } = await import('../../shared/lib/mockAuth');
         const result = mockSignUp(role, name, email);
@@ -114,11 +133,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           setAuthenticated(true);
           setRole(result.session.role);
           setUser(result.session.user);
-        return true;
+          return result.session.role;
+        }
       }
-      }
+      throw new Error('signup-failed');
     }
-    return false;
+    return null;
   };
 
   const logout = async () => {

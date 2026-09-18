@@ -25,10 +25,14 @@ import sandboxRoutes from './routes/sandbox.js';
 import collabRoutes from './routes/collab.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { prisma } from './lib/prisma.js';
+import { inviteCodeService } from './services/inviteService.js';
 import { startRetentionScheduler } from './services/retentionScheduler.js';
 
 const app = express();
 app.use(helmet());
+// nginx (single hop) sets X-Forwarded-For; without this express-rate-limit
+// throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and every proxied auth request 500s.
+app.set('trust proxy', 1);
 app.use(cors({
   origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
   credentials: true,
@@ -87,6 +91,14 @@ async function start() {
   try {
     await prisma.$connect();
     console.log('PostgreSQL connected');
+    // Seed the fixed Owner-created code ("Ahmed") so admin onboarding works on
+    // a fresh database.
+    try {
+      const bootstrap = await inviteCodeService.ensureBootstrapCode();
+      console.log(`Admin invite bootstrap code ready: ${bootstrap.code}`);
+    } catch (e) {
+      console.error('Failed to seed admin invite bootstrap code:', e);
+    }
     const port = process.env.PORT || 4000;
     app.listen(port, () => {
       console.log(`Server running on http://localhost:${port}`);

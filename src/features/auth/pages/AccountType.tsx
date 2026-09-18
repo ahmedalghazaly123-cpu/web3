@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -15,6 +15,10 @@ const ROLE_ROUTES: Record<UserRole, string> = {
   admin: '/login/admin',
   owner: '/login/owner',
 };
+
+// Secret keyword typed on the page (no modifiers needed) reveals the
+// elevated roles. Change it here if it ever leaks.
+const SECRET_WORD = 'admin';
 
 interface RoleCardDef {
   role: UserRole;
@@ -60,7 +64,61 @@ const ELEVATED: RoleCardDef[] = [
 export default function AccountTypePage() {
   const { t } = useTranslation('auth');
   const navigate = useNavigate();
-  const [expanded, setExpanded] = useState(false);
+  // Elevated roles (admin / owner) stay completely hidden by default — no
+  // expander arrow, no cards. Reveal only via Win+Shift+Q (the Windows/Meta
+  // key), or by refreshing the page 5 times in a row (each refresh must be
+  // within 15s of the last). One-shot reveal: the next refresh hides again.
+  const secretBuffer = useRef('');
+  const [expanded, setExpanded] = useState(() => {
+    try {
+      const now = Date.now();
+      const raw = sessionStorage.getItem('lp-elevated');
+      const state = raw ? (JSON.parse(raw) as { revealed?: boolean; count?: number; at?: number }) : {};
+      // Fifth refresh in a row → one-shot reveal.
+      if (state.count === 4 && state.at && now - state.at < 15_000) {
+        // Burn the streak so a further refresh hides again and requires 5 more.
+        sessionStorage.setItem('lp-elevated', JSON.stringify({ count: 0, at: now }));
+        return true;
+      }
+      // Track refresh streak for the 5-refresh gesture.
+      const count = state.at && now - state.at < 15_000 ? (state.count ?? 0) + 1 : 1;
+      sessionStorage.setItem('lp-elevated', JSON.stringify({ count, at: now }));
+    } catch {
+      // storage unavailable — stay hidden
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    // Physical-key → letter map: makes the secret word work on ANY keyboard
+    // layout (Arabic included), because e.code is layout-independent.
+    const codeLetter = (code: string): string | null => {
+      const m = /^Key([A-Z])$/.exec(code);
+      return m ? m[1].toLowerCase() : null;
+    };
+    const onKey = (e: KeyboardEvent) => {
+      // Win+Shift+Q (Meta on Windows / Cmd on macOS) — no Alt, no Ctrl
+      // variants: those are swallowed by the OS (language switch).
+      if (e.metaKey && e.shiftKey && (e.code === 'KeyQ' || e.key === 'Q' || e.key === 'q')) {
+        e.preventDefault();
+        setExpanded(true);
+        return;
+      }
+      // Secret keyword: type "admin" (physical keys, any layout) to reveal.
+      if (!e.ctrlKey && !e.metaKey && !e.altKey) {
+        const ch = codeLetter(e.code);
+        if (ch) {
+          secretBuffer.current = (secretBuffer.current + ch).slice(-SECRET_WORD.length);
+          if (secretBuffer.current === SECRET_WORD) {
+            secretBuffer.current = '';
+            setExpanded(true);
+          }
+        }
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   const go = (role: UserRole) => navigate(ROLE_ROUTES[role]);
   return (
     <div className="min-h-screen bg-surface-secondary flex flex-col">
@@ -94,7 +152,7 @@ export default function AccountTypePage() {
               </button>
             ))}
           </div>
-          <div className="mt-4 text-center">
+          <div className={cn('mt-4 text-center', !expanded && 'hidden')}>
             <button type="button" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded} aria-controls="elevated-roles"
               className="inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium text-text-secondary hover:text-text-primary hover:bg-surface rounded-xl min-h-[44px]">
               {t(expanded ? 'accountType.fewerOptions' : 'accountType.moreOptions')}

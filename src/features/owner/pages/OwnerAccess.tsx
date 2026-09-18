@@ -6,6 +6,7 @@ import { Button } from '../../../shared/components/ui/Button';
 import { Avatar } from '../../../shared/components/ui/Avatar';
 import { IconBox } from '../../../shared/components/ui/IconBox';
 import { EmptyState } from '../../../shared/components/ui/EmptyState';
+import { InviteCodesCard } from '../components/InviteCodesCard';
 import { useToast } from '../../../shared/components/ui/ToastProvider';
 import { cn } from '../../../shared/lib/utils';
 import { Users, Search, Plus, Crown, Shield, Briefcase, GraduationCap, KeyRound, ShieldCheck } from 'lucide-react';
@@ -90,6 +91,9 @@ export default function OwnerAccess() {
           </div>
         </div>
       </Card>
+
+      {/* Owner-issued invite / security codes for Admin accounts */}
+      <InviteCodesCard />
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center">
