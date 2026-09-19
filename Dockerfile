@@ -13,8 +13,17 @@ RUN npm run build
 
 FROM nginx:alpine AS runner
 
+# nginx's own entrypoint renders /etc/nginx/templates/*.template with envsubst
+# into /etc/nginx/conf.d/default.conf at container start — so the API upstream can
+# be changed from the environment (Railway service variable / docker-compose)
+# without rebuilding the image. The default points at the deployed backend.
+COPY nginx.conf.template /etc/nginx/templates/default.conf.template
+ENV BACKEND_URL=https://backend-production-ea96.up.railway.app
+# Bake a first render so the image is always valid on its own; the runtime
+# entrypoint re-renders it from the template when BACKEND_URL is overridden.
+RUN envsubst '$BACKEND_URL' < /etc/nginx/templates/default.conf.template > /etc/nginx/conf.d/default.conf
+
 COPY --from=builder /app/dist /usr/share/nginx/html
-COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 EXPOSE 80
 

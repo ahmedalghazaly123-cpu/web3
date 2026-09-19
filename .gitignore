@@ -43,3 +43,4 @@ screenshots/
 # Screenshots (regenerable via Playwright)
 # Server runtime logs
 
+.vercel

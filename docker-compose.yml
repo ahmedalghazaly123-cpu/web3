@@ -62,6 +62,10 @@ services:
       args:
         VITE_API_URL: /api/v1
     container_name: learnpilot-web
+    # nginx renders nginx.conf.template at start-up and proxies /api/* here, so the
+    # browser stays same-origin (no CORS, no absolute backend URL in the bundle).
+    environment:
+      BACKEND_URL: http://server:4000
     ports:
       - "3000:80"
     depends_on:

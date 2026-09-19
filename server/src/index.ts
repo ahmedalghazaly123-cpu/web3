@@ -33,8 +33,15 @@ app.use(helmet());
 // nginx (single hop) sets X-Forwarded-For; without this express-rate-limit
 // throws ERR_ERL_UNEXPECTED_X_FORWARDED_FOR and every proxied auth request 500s.
 app.set('trust proxy', 1);
+// CORS_ORIGIN accepts a comma-separated list (e.g. the Railway web domain plus
+// localhost) so one deployment can serve several front-ends. The browser normally
+// talks to nginx on the same origin, so CORS is only needed for direct API access.
+const corsOrigins = (process.env.CORS_ORIGIN || 'http://localhost:3000')
+  .split(',')
+  .map((o) => o.trim())
+  .filter(Boolean);
 app.use(cors({
-  origin: process.env.CORS_ORIGIN || 'http://localhost:3000',
+  origin: corsOrigins.length > 1 ? corsOrigins : corsOrigins[0],
   credentials: true,
 }));
 app.use(cookieParser());

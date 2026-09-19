@@ -464,7 +464,12 @@ const OAUTH_STATE_COOKIE = 'lp_oauth_state';
 const signState = (value: string) =>
   crypto.createHmac('sha256', process.env.SESSION_SECRET || 'dev-secret').update(value).digest('hex');
 const apiBase = () => process.env.PUBLIC_API_URL || `http://localhost:${process.env.PORT || 4000}`;
-const feOrigin = () => process.env.FRONTEND_URL || process.env.CORS_ORIGIN || 'http://localhost:3000';
+// FRONTEND_URL wins; CORS_ORIGIN may be a comma-separated list, and the OAuth
+// redirect must point at exactly one origin — so take its first entry.
+const feOrigin = () =>
+  process.env.FRONTEND_URL ||
+  (process.env.CORS_ORIGIN || '').split(',')[0]?.trim() ||
+  'http://localhost:3000';
 const googleRedirectUri = () => process.env.GOOGLE_CALLBACK_URL || `${apiBase()}/api/v1/auth/google/callback`;
 
 // GET /api/v1/auth/google — start the OAuth flow (302 redirect to Google)

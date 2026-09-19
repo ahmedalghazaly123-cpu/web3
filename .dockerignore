@@ -21,3 +21,10 @@ scripts/debug/*.log
 server/dist
 server/prisma/_schema_head.prisma
 .kilo
+# Never needed to build or serve the SPA — shipping them made every Railway build
+# upload ~100 MB of documentation and HF-Space assets. `dist` stays available
+# because Dockerfile.web serves the prebuilt bundle from it.
+docs
+spaces
+tests
+.env.*

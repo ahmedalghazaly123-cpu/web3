@@ -1,0 +1,88 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# LearnPilot web — nginx (SPA + same-origin /api proxy)
+#
+# This file is a TEMPLATE: the official nginx image runs `envsubst` over
+# /etc/nginx/templates/*.template at container start and writes the result to
+# /etc/nginx/conf.d/default.conf, so the upstream comes from the BACKEND_URL
+# environment variable:
+#   • docker compose → BACKEND_URL=http://server:4000      (docker-compose.yml)
+#   • Railway        → BACKEND_URL=https://<backend>.up.railway.app (service var)
+#
+# The upstream is a STATIC hostname on purpose: nginx resolves it once at start-up
+# with the container's real DNS (/etc/resolv.conf), and it works in both Docker
+# Compose and Railway. Putting the hostname in a variable (`set $up ...;
+# proxy_pass $up;`) forces nginx to use a `resolver` directive — and 127.0.0.11
+# (Docker's embedded DNS) does NOT exist on Railway, which made every /api/* request
+# answer 502 Bad Gateway there.
+#
+# This file must stay a plain `server {}` (plus http-context `map`s) because
+# conf.d/*.conf is included from inside nginx's `http` block: an `events`/`http`
+# wrapper here is a fatal "directive is not allowed here" error.
+# ─────────────────────────────────────────────────────────────────────────────
+
+# WebSocket/upgrade passthrough.
+map $http_upgrade $connection_upgrade {
+    default upgrade;
+    ''      close;
+}
+
+# Keep the real client IP: on Railway the platform edge already sets
+# X-Forwarded-For, and appending our own address would make the backend bucket
+# every user under the proxy IP (express-rate-limit + Express `trust proxy 1`).
+# Locally (compose) there is no edge in front, so fall back to the peer address.
+map $http_x_forwarded_for $forwarded_for {
+    default $http_x_forwarded_for;
+    ''      $remote_addr;
+}
+
+# Same idea for the scheme: the platform edge terminates TLS, so $scheme is http.
+map $http_x_forwarded_proto $forwarded_proto {
+    default $http_x_forwarded_proto;
+    ''      $scheme;
+}
+
+server {
+    listen 80;
+    server_name _;
+
+    root /usr/share/nginx/html;
+    index index.html;
+
+    # Uploads: POST /api/v1/files allows 50 MB and voice audio 25 MB; nginx's
+    # default is 1 MB, which answers 413 before the request reaches Express.
+    client_max_body_size 60m;
+
+    # SPA: every client-side route (/planner, /dashboard, ...) falls back to the
+    # React shell instead of 404-ing on a refresh/deep link.
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Same-origin API: the browser only ever talks to this domain, so there is no
+    # CORS preflight and no absolute backend URL baked into the bundle.
+    location /api {
+        proxy_pass ${BACKEND_URL};
+        proxy_http_version 1.1;
+        proxy_set_header Host $proxy_host;          # Railway's edge routes by Host
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $forwarded_for;
+        proxy_set_header X-Forwarded-Proto $forwarded_proto;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+        proxy_ssl_server_name on;                   # SNI for the HTTPS upstream
+        proxy_read_timeout 300s;                    # AI / voice calls can be slow
+        proxy_cache_bypass $http_upgrade;
+    }
+
+    location /health {
+        proxy_pass ${BACKEND_URL};
+        proxy_set_header Host $proxy_host;
+        proxy_ssl_server_name on;
+    }
+
+    location /ready {
+        proxy_pass ${BACKEND_URL};
+        proxy_set_header Host $proxy_host;
+        proxy_ssl_server_name on;
+    }
+}

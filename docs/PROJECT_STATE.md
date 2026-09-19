@@ -2,6 +2,26 @@
 
 > هذه الوثيقة المصدر الوحيد المعتمد لحالة المشروع. التقارير القديمة مؤرشفة في `docs/archive/` (كثيرة منها متضاربة وقديمة).
 
+## 🔗 الرابط العام (يشارَك مع الأصدقاء) — 2026-09-19
+
+| ماذا | الرابط |
+|---|---|
+| **الموقع — ده اللي تبعته لأصحابك** | `https://frontend-production-a628e.up.railway.app` |
+| الـ API (داخلي، مش للاستخدام المباشر) | `https://backend-production-ea96.up.railway.app` (`/health`, `/ready`) |
+| نسخة Vercel الاحتياطية (SPA ثابت) | `https://web3-1-five.vercel.app` |
+
+**المسار:** المتصفح → nginx (SPA + `proxy /api/*` نفس-المنشأ) → Express على Railway → Postgres على Railway. فلا CORS في المسار العادي، ولا رابط باك-إند مكتوب داخل الباندل.
+
+- **سبب العطل السابق (مُصلَح):** ملف `nginx.conf` المرفوع على GitHub كان بيستخدم `resolver 127.0.0.11` (DNS الداخلي لـ Docker) مع `proxy_pass $variable`؛ الـ resolver ده **غير موجود على Railway**، فكان كل `/api/*` يرد **502** بينما الصفحة نفسها تفتح (`/` وdeep-links ترجع 200). الحل: `nginx.conf.template` بـ upstream **ثابت** (`${BACKEND_URL}` عبر `envsubst`)، وهو نفس الملف اللي يخدم compose وRailway، وبيكسّر الاعتماد على `resolver`.
+- **متغيرات خدمة `backend` على Railway** تُضبط من `server/.env` + قيم خاصة بالنشر (CORS_ORIGIN/FRONTEND_URL/PUBLIC_API_URL/`OLLAMA_ENABLED=false`/أسرار جلسة جديدة) عبر `node scripts/debug/railway-env-push.cjs --service backend --apply` — السكربت مابيطبعش أي قيمة سرّية (أسماء + أطوال فقط).
+- **فحص الرابط العام:** `node scripts/debug/public-url-check.cjs` (SPA + deep-link + health + ready + `/api` نفس-المنشأ + CORS + بداية Google OAuth + الباندل) — الهدف **8/8**.
+- **الفحص الكامل لقبل المشاركة:** نفس السكربت + `node scripts/debug/bundle-remote-scan.cjs <url>` للتأكد إن الباندل المرفوع مافيهوش `localhost` فعّال.
+
+### خطوة يدوية واحدة متبقية للمالك (لتفعيل «الدخول بـ Google» فقط)
+أضف في Google Cloud Console → Credentials → الـ OAuth client → **Authorized redirect URIs**:
+`https://backend-production-ea96.up.railway.app/api/v1/auth/google/callback`
+لحد ما تتعمل، زر Google بيرجع `google-oauth-not-configured`/`redirect_uri_mismatch`، و**الدخول/التسجيل بالإيميل شغّال عادي**.
+
 ## Docker: المشروع حي (2026-09-15)
 
 المشروع موجود في Docker وشغال كـ **compose project `web3` — running(3)**:
@@ -192,3 +212,10 @@
 - `or-eval.cjs` — تقييم موديلات OpenRouter المجانية ببرومبت tutor حقيقي (يكشف الردود الفارغة أو تسريب الـ reasoning قبل تثبيت أي موديل).
 - `or-arabic.cjs` — فحص القدرة العربية لموديلات OpenRouter المجانية (المشروع ثنائي اللغة، فالموديل الافتراضي لازم يرد عربيًا نظيفًا).
 - `lint-all.cjs` — تشغيل oxlint المحلي على `server/src` و`src` و`scripts` (تجاوز بطء `npx` على هذا الجهاز).
+
+### سكربتات النشر العام (`scripts/debug/`) — 2026-09-19
+- `public-url-check.cjs` — فحص الرابط المنشور كما يراه المتصفح (ليس localhost): SPA + deep-link + `/health` + `/ready` + وصول `/api` نفس-المنشأ + CORS + بداية Google OAuth + الباندل. يقبل `[webBase] [backendBase] [apiBase]` كـ arguments.
+- `bundle-remote-scan.cjs` — يكشف روابط الـ API المخبوزة فعلاً داخل الباندل المرفوع (`localhost`/railway/…) في أي رابط منشور.
+- `railway-vars.cjs` — طباعة **أسماء** متغيرات خدمة Railway + قيم قائمة بيضاء غير سرّية فقط (الأسرار تظهر كـ `<set:N chars>`).
+- `railway-status-summary.cjs` — ملخص المشروع: لكل خدمة المصدر/builder/الجذر/الدومين/حالة آخر نشر.
+- `railway-env-push.cjs` — نقل متغيرات `server/.env` + قيم خاصة بالنشر إلى خدمة Railway عبر argv (بدون shell وبدون طباعة قيم)، مع `--apply` و`--no-oauth` و`--keep-local-secrets`.

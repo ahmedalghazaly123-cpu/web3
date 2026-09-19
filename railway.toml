@@ -1,5 +1,12 @@
 [build]
-buildCommand = "npm run build"
+# The root Dockerfile builds the SPA and serves it with nginx, which also proxies
+# /api/* to the backend service on the same origin (see nginx.conf.template).
+# `buildCommand` / `startCommand` belong to the Nixpacks builder and are ignored
+# for a Dockerfile build — a leftover `startCommand` would replace the container
+# CMD (e.g. `npx serve` inside an nginx-only image) and take the service down.
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
 
+# The container CMD from the Dockerfile is used as-is (nginx on port 80).
 [deploy]
-startCommand = "npx serve -s dist -l $PORT"
+restartPolicyType = "ON_FAILURE"
