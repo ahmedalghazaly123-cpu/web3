@@ -102,8 +102,23 @@ if (!apply) {
 }
 
 const pairs = Object.entries(toSet).map(([k, v]) => `${k}=${v}`);
+
+// On Windows the CLI is a Node shim on PATH (`railway.cmd` / an extensionless
+// shell script), which execFileSync cannot start without a shell — and going
+// through cmd.exe would re-parse values that contain commas or spaces. The npm
+// package ships a real railway.exe, so prefer it (RAILWAY_BIN overrides).
+function resolveRailwayBin() {
+  if (process.env.RAILWAY_BIN) return process.env.RAILWAY_BIN;
+  if (process.platform === 'win32') {
+    const npmGlobal = path.join(process.env.APPDATA || '', 'npm', 'node_modules', '@railway', 'cli', 'bin', 'railway.exe');
+    if (fs.existsSync(npmGlobal)) return npmGlobal;
+  }
+  return 'railway';
+}
+
 try {
-  execFileSync('railway', ['variable', 'set', ...pairs, '--service', service, '--environment', ENV_NAME], {
+  const bin = resolveRailwayBin();
+  execFileSync(bin, ['variable', 'set', ...pairs, '--service', service, '--environment', ENV_NAME], {
     stdio: ['ignore', 'inherit', 'inherit'],
     shell: false,
   });

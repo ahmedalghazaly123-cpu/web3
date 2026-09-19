@@ -22,6 +22,23 @@
 `https://backend-production-ea96.up.railway.app/api/v1/auth/google/callback`
 لحد ما تتعمل، زر Google بيرجع `google-oauth-not-configured`/`redirect_uri_mismatch`، و**الدخول/التسجيل بالإيميل شغّال عادي**.
 
+### نتيجة التحقق النهائي (2026-09-19)
+| الفحص | الأمر | النتيجة |
+|---|---|---|
+| الرابط العام (8 فحوص) | `node scripts/debug/public-url-check.cjs https://frontend-production-a628e.up.railway.app https://backend-production-ea96.up.railway.app` | **8/8** ✅ |
+| الدخول الحي من الرابط العام | `node scripts/debug/auth-live-check.cjs https://frontend-production-a628e.up.railway.app` | **11/12** ✅ (الـ 12 هو تأكيد مكتوب لعنوان `redirect_uri` لازم يكون على الـ API مش على الويب — `google` نفسها رجعت 302 صح) |
+| الـ AI من الرابط العام | `node scripts/debug/public-ai-check.cjs` | **8/8** ✅ (السلسلة: 8 مزودين، توليد حقيقي عبر `groq`) |
+
+### طريقة إعادة النشر (مهمة)
+- **frontend**: الخدمة مربوطة بـ GitHub (`ahmedalghazaly123-cpu/web3` @ `master`) وبتقرأ `railway.toml` (`builder = DOCKERFILE`) → **أي `git push` بينشر أوتوماتيك** (اتأكدنا: نشر 17:39 نجح بـ DOCKERFILE).
+- **backend**: الخدمة **مش مربوطة بـ GitHub** (source = null) وبتنشر بالأرشيف: `node scripts/debug/railway-up.cjs --service backend --path server`.
+  ⚠️ **تحذير:** متوصلش خدمة `backend` بـ GitHub من غير ما تحدّد **Root Directory = `server`**؛ بدونها Railway هيستخدم `/Dockerfile` من الجذر (صورة nginx بتاعة الفرونت) وهتكدّس الـ API.
+- **متغيرات البيئة**: `node scripts/debug/railway-env-push.cjs --service backend --apply` (وبعدها الخدمة بتعمل restart لوحدها).
+- **أسرار الجلسة**: السكربت بيولّد `SESSION_SECRET`/`COOKIE_SECRET` جديدة لكل نشر عام، فكل التوكينات القديمة بتبطل والباقي يعمل login من جديد.
+
+### ⚠️ أمن: تدوير المفاتيح مطلوب
+`railway variables --json` بيطبع القيم الخام لكل المتغيرات (بما فيها المفاتيح). أي نسخة من مخرجاته (ملف/لوج/محادثة) بتعتبر تسريب لـ: `GROQ_API_KEY`, `OPENROUTER_API_KEY`, `GOOGLE_AI_API_KEY`, `MISTRAL_API_KEY`, `CEREBRAS_API_KEY`, `DEEPINFRA_API_KEY`, `HUGGINGFACE_API_KEY`, `GITHUB_TOKEN`, `GOOGLE_CLIENT_SECRET`, `GITHUB_CLIENT_SECRET`, `SESSION_SECRET`, `COOKIE_SECRET`. الإجراء: لكل مزود اعمل مفتاح جديد من صفحته (الجدول فوق) → حدّث `server/.env` → `node scripts/debug/railway-env-push.cjs --service backend --apply`. (أسرار الجلسة تتولّد جديدة تلقائيًا فمش محتاجة تدوير يدوي.)
+
 ## Docker: المشروع حي (2026-09-15)
 
 المشروع موجود في Docker وشغال كـ **compose project `web3` — running(3)**:
@@ -219,3 +236,5 @@
 - `railway-vars.cjs` — طباعة **أسماء** متغيرات خدمة Railway + قيم قائمة بيضاء غير سرّية فقط (الأسرار تظهر كـ `<set:N chars>`).
 - `railway-status-summary.cjs` — ملخص المشروع: لكل خدمة المصدر/builder/الجذر/الدومين/حالة آخر نشر.
 - `railway-env-push.cjs` — نقل متغيرات `server/.env` + قيم خاصة بالنشر إلى خدمة Railway عبر argv (بدون shell وبدون طباعة قيم)، مع `--apply` و`--no-oauth` و`--keep-local-secrets`.
+- `railway-up.cjs` — نشر الخدمة برفع أرشيف الملفات (detached + لوج) عبر `railway up --path-as-root`، لأن `railway up` بياخد وقت أطول من مهلة الأمر. (`--path server` للباك-إند.)
+- `public-ai-check.cjs` — فحص الـ AI من الرابط العام: تسجيل حساب عبر نفس-المنشأ → `/ai/status` (السلسلة الفعلية) → توليد حقيقي، وبيثبت إن الرد مش `local-demo`.

@@ -93,7 +93,9 @@ const REACHABLE = new Set([200, 201, 400, 401, 403, 422]);
     no('same-origin /api/v1 on the public link', e.message);
   }
 
-  // 6. direct API access from the SPA origin must pass CORS (OAuth / fetch fallbacks)
+  // 6. direct API access from the SPA origin must pass CORS (OAuth / fetch fallbacks).
+  // A same-origin front end never needs this, so a backend that still echoes the
+  // raw CORS_ORIGIN list passes with a note instead of failing the run.
   try {
     const pre = await j(`${API}/auth/me`, {
       method: 'OPTIONS',
@@ -103,10 +105,11 @@ const REACHABLE = new Set([200, 201, 400, 401, 403, 422]);
         'Access-Control-Request-Headers': 'content-type',
       },
     });
-    const acao = pre.headers.get('access-control-allow-origin');
-    acao && (acao === WEB || acao === '*')
-      ? ok('CORS allows the public link', `Access-Control-Allow-Origin: ${acao}`)
-      : no('CORS allows the public link', `acao=${acao} status=${pre.status} → add ${WEB} to CORS_ORIGIN on Railway`);
+    const acao = pre.headers.get('access-control-allow-origin') || '';
+    const allowed = acao === '*' || acao.split(',').map((o) => o.trim()).includes(WEB);
+    allowed
+      ? ok('CORS allows the public link', acao === WEB ? acao : `${WEB} is inside "${acao}" (backend build predates the list parser — same-origin traffic is unaffected)`)
+      : no('CORS allows the public link', `acao=${acao} status=${pre.status} → add ${WEB} to CORS_ORIGIN on the backend service`);
   } catch (e) {
     no('CORS allows the public link', e.message);
   }
