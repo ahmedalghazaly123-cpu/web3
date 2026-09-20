@@ -18,15 +18,17 @@
 - **الفحص الكامل لقبل المشاركة:** نفس السكربت + `node scripts/debug/bundle-remote-scan.cjs <url>` للتأكد إن الباندل المرفوع مافيهوش `localhost` فعّال.
 
 ### خطوة يدوية واحدة متبقية للمالك (لتفعيل «الدخول بـ Google» فقط)
-أضف في Google Cloud Console → Credentials → الـ OAuth client → **Authorized redirect URIs**:
-`https://backend-production-ea96.up.railway.app/api/v1/auth/google/callback`
-لحد ما تتعمل، زر Google بيرجع `google-oauth-not-configured`/`redirect_uri_mismatch`، و**الدخول/التسجيل بالإيميل شغّال عادي**.
+البداية + الكول باك بقوا **same-origin** عبر بروكسي الفرونت، فسجّل في Google Cloud Console → Credentials → الـ OAuth client → **Authorized redirect URIs** (انسخ بالحرف):
+`https://frontend-production-a628e.up.railway.app/api/v1/auth/google/callback`
+و**Authorized JavaScript origins**:
+`https://frontend-production-a628e.up.railway.app`
+لحد ما تتعمل، زر Google بيرجع `redirect_uri_mismatch`، و**الدخول/التسجيل بالإيميل شغّال عادي**.
 
 ### نتيجة التحقق النهائي (2026-09-19)
 | الفحص | الأمر | النتيجة |
 |---|---|---|
 | الرابط العام (8 فحوص) | `node scripts/debug/public-url-check.cjs https://frontend-production-a628e.up.railway.app https://backend-production-ea96.up.railway.app` | **8/8** ✅ |
-| الدخول الحي من الرابط العام | `node scripts/debug/auth-live-check.cjs https://frontend-production-a628e.up.railway.app` | **11/12** ✅ (الـ 12 هو تأكيد مكتوب لعنوان `redirect_uri` لازم يكون على الـ API مش على الويب — `google` نفسها رجعت 302 صح) |
+| الدخول الحي من الرابط العام | `node scripts/debug/auth-live-check.cjs https://frontend-production-a628e.up.railway.app` | **12/12** ✅ (بداية + كول باك same-origin عبر بروكسي الفرونت) |
 | الـ AI من الرابط العام | `node scripts/debug/public-ai-check.cjs` | **8/8** ✅ (السلسلة: 8 مزودين، توليد حقيقي عبر `groq`) |
 
 ### طريقة إعادة النشر (مهمة)
