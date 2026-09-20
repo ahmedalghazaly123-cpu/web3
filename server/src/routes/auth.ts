@@ -470,7 +470,11 @@ const feOrigin = () =>
   process.env.FRONTEND_URL ||
   (process.env.CORS_ORIGIN || '').split(',')[0]?.trim() ||
   'http://localhost:3000';
-const googleRedirectUri = () => process.env.GOOGLE_CALLBACK_URL || `${apiBase()}/api/v1/auth/google/callback`;
+// The OAuth callback must share the SAME origin as the start step, otherwise the
+// lp_oauth_state cookie set on the SPA domain is missing on the API domain and
+// the callback always fails with invalid_state (expected=0). Both go through
+// the nginx /api proxy on the frontend domain.
+const googleRedirectUri = () => process.env.GOOGLE_CALLBACK_URL || `${feOrigin()}/api/v1/auth/google/callback`;
 
 // GET /api/v1/auth/google — start the OAuth flow (302 redirect to Google)
 router.get('/google', async (req: Request, res: Response) => {
@@ -594,7 +598,7 @@ const GITHUB_TOKEN_URL = 'https://github.com/login/oauth/access_token';
 const GITHUB_USER_URL = 'https://api.github.com/user';
 const GITHUB_EMAILS_URL = 'https://api.github.com/user/emails';
 const githubRedirectUri = () =>
-  process.env.GITHUB_CALLBACK_URL || `${apiBase()}/api/v1/auth/github/callback`;
+  process.env.GITHUB_CALLBACK_URL || `${feOrigin()}/api/v1/auth/github/callback`;
 
 router.get('/github', async (req: Request, res: Response) => {
   const clientId = process.env.GITHUB_CLIENT_ID;

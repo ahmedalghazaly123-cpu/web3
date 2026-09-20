@@ -81,7 +81,11 @@ Object.assign(toSet, {
   AUTH_RATE_LIMIT_MAX: '200',
 });
 
-if (withOauth) toSet.GOOGLE_CALLBACK_URL = `${API_URL}/api/v1/auth/google/callback`;
+if (withOauth) {
+  // Same-origin via the nginx /api proxy: start + callback share the cookie domain.
+  toSet.GOOGLE_CALLBACK_URL = `${WEB_URL}/api/v1/auth/google/callback`;
+  toSet.GITHUB_CALLBACK_URL = `${WEB_URL}/api/v1/auth/github/callback`;
+}
 if (keepLocalSecrets) {
   if (local.SESSION_SECRET) toSet.SESSION_SECRET = local.SESSION_SECRET;
   if (local.COOKIE_SECRET) toSet.COOKIE_SECRET = local.COOKIE_SECRET;
